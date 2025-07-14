@@ -22,7 +22,8 @@ export async function getChatCompletion({ sessionId, role, text, userName }) {
             minute: '2-digit',
             day: '2-digit',
             month: '2-digit',
-            year: 'numeric'
+            year: 'numeric',
+            timeZone: 'Europe/Berlin' 
         });
 
         const history = await getLastMessages(sessionId, 20);
