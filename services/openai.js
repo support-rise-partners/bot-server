@@ -27,12 +27,12 @@ export async function getChatCompletion({ sessionId, role, text, userName }) {
 
         const history = await getLastMessages(sessionId, 20);
 
-        const lastMessage = role === 'user'
-            ? { role, content: `${messageTime} ${userName || 'Benutzer'}: ${text}` }
-            : { role, content: text };
+        const lastMessage = { role, content: text };
+
+        const enrichedSystemPrompt = `${systemPrompt}\n\nZeit jetzt: ${messageTime}\nUsername: ${userName || 'Benutzer'}`;
 
         const messages = [
-            { role: "system", content: systemPrompt },
+            { role: "system", content: enrichedSystemPrompt },
             ...history.map(m => ({ role: m.role, content: m.message })),
             lastMessage
         ];
