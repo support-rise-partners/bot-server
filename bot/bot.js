@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { adapter } from './adapter.js';
 import { saveConversationReference } from '../services/storage.js';
+import { saveOrUpdateReference } from '../services/conversationReferenceService.js';
 import { TurnContext } from 'botbuilder';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -19,6 +20,7 @@ class MyBot extends ActivityHandler {
                 const userText = context.activity.text || '';
                 const sessionId = context.activity.conversation.id;
                 const userName = context.activity.from.name;
+                await saveOrUpdateReference(context);
 
                 await context.sendActivities([
                     { type: 'typing' },
