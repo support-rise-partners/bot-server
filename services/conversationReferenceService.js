@@ -1,6 +1,6 @@
 import { TurnContext } from 'botbuilder';
 import { TableClient } from "@azure/data-tables";
-import { getUserDataById, getUserIdByEmail } from './graph.js';
+import { getUserDataById, getUserIdByEmail } from './graphClient.js';
 
 const referenceClient = TableClient.fromConnectionString(
   process.env.AZURE_STORAGE_CONNECTION_STRING,
