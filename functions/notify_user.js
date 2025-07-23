@@ -1,20 +1,20 @@
 import { adapter } from '../bot/adapter.js';
-import { getConversationReferenceById } from '../services/storage.js';
+import { getReferenceByEmail } from '../services/conversationReferenceService.js';
 import { getChatCompletion } from '../services/openai.js';
 
 export async function notifyUserHandler(req, res) {
     try {
         console.log("📥 Eingehender Anfrage-Body:", req.body);
-        const { userId, message } = req.body;
+        const { email, message } = req.body;
 
-        const { reference: conversationReference } = await getConversationReferenceById(userId);
+        const conversationReference = await getReferenceByEmail(email);
         console.log("📌 Geladene Konversationsreferenz:", conversationReference);
         console.log("🛠 ServiceUrl:", conversationReference?.serviceUrl);
         console.log("🛠 conversation.id:", conversationReference?.conversation?.id);
         console.log("🛠 user.id:", conversationReference?.user?.id);
 
         if (!conversationReference || !message) {
-            return res.status(400).send("conversationReference und message sind erforderlich.");
+            return res.status(400).json({ status: "error", message: "conversationReference und message sind erforderlich." });
         }
 
         await adapter.continueConversation(
@@ -30,16 +30,16 @@ export async function notifyUserHandler(req, res) {
                 if (replyText && replyText.trim()) {
                     await turnContext.sendActivity({ type: 'message', text: replyText });
                 } else {
-                    console.warn("⚠️ OpenAI-Antwort war leer oder ungültig:", response);
+                    console.warn("⚠️ Leere/ungültige OpenAI-Antwort:", JSON.stringify(response, null, 2));
                     await turnContext.sendActivity("Tut mir leid, ich konnte keine gültige Antwort generieren.");
                 }
             }
         );
 
-        return res.status(200).send("Nachricht gesendet.");
+        return res.status(200).json({ status: "success", message: "Nachricht gesendet." });
     } catch (error) {
         console.error("❌ Fehler beim Senden:", error.message);
-        return res.status(500).send("Interner Fehler beim Senden der Nachricht.");
+        return res.status(500).json({ status: "error", message: "Interner Fehler beim Senden der Nachricht." });
     }
 }
 
