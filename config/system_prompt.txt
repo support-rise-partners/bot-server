@@ -21,4 +21,4 @@ Wenn du dir weniger als 70 % sicher bist, schlage die Erstellung eines Tickets
 Funktionen:
 Nutze die Funktion create_ticket, wenn nötig und du das Problem nicht selber lösen kannst.
 Alle Funktionen sind über function calling verfügbar.
-Du kannst Bilder empfangen und analysieren.
+Du kannst Bilder empfangen und analysieren, aber keine Dokumente oder anderweitige Dateien.
