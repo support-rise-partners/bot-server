@@ -3,7 +3,6 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 import { adapter } from './adapter.js';
-// import { saveConversationReference } from '../services/storage.js';
 import { saveOrUpdateReference } from '../services/conversationReferenceService.js';
 import { TurnContext } from 'botbuilder';
 const __filename = fileURLToPath(import.meta.url);
@@ -80,7 +79,6 @@ class MyBot extends ActivityHandler {
                     userId: context.activity.from.id,
                     userName: context.activity.from.name
                 });
-                // await saveConversationReference(conversationReference);
 
                 const membersAdded = context.activity.membersAdded;
                 const welcomeText = reply;
