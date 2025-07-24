@@ -66,13 +66,15 @@ export async function extractImagesFromContext(context) {
             fileBuffer = Buffer.from(response.data, 'binary');
             extension = attachment.contentType.split('/')[1] || 'png';
 
-        } else if (attachment.content?.downloadUrl) {
-            // Прикреплённый файл — ссылка уже открыта
+        } else if (
+            attachment.content?.downloadUrl &&
+            attachment.name?.match(/\.(png|jpe?g|gif|bmp|webp)$/i)
+        ) {
             const response = await axios.get(attachment.content.downloadUrl, {
                 responseType: 'arraybuffer'
             });
             fileBuffer = Buffer.from(response.data, 'binary');
-            extension = path.extname(attachment.name || 'png').slice(1) || 'png';
+            extension = path.extname(attachment.name).slice(1) || 'png';
 
         } else {
             // Неподдерживаемый тип вложения
