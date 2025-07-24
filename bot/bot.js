@@ -31,6 +31,7 @@ class MyBot extends ActivityHandler {
                     role: 'user',
                     text: userText,
                     userName,
+                    imageUrls: ["https://www.5.ua/media/pictures/original/194292.jpg?t=1600087834"] // заглушка
                 });
 
                 if (reply && reply.trim() !== '') {

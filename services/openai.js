@@ -13,7 +13,7 @@ const apiVersion = process.env.OPENAI_VERSION;
 
 const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion });
 
-export async function getChatCompletion({ sessionId, role, text, userName }) {
+export async function getChatCompletion({ sessionId, role, text, userName, imageUrls }) {
     try {
         const functions = [functionSchema];
 
@@ -30,14 +30,17 @@ export async function getChatCompletion({ sessionId, role, text, userName }) {
 
         let lastMessage = {
             role,
-            content: [{ type: "text", text }, 
-                {
-                    type: "image_url",
-                    image_url: {
-                    url: "https://lernen.zoner.de/wp-content/uploads/2018/10/entfernen-sie-drahte-mull-oder-andere-unerwunschte-objekte-auf-ihren-fotos.jpg"
-                    }
-                }]
+            content: [{ type: "text", text }]
         };
+
+        if (Array.isArray(imageUrls) && imageUrls.length > 0) {
+            for (const url of imageUrls) {
+                lastMessage.content.push({
+                    type: "image_url",
+                    image_url: { url }
+                });
+            }
+        }
 
         const enrichedSystemPrompt = `${systemPrompt}\n\nZeit jetzt: ${messageTime}\nUsername: ${userName || 'Benutzer'}`;
 
