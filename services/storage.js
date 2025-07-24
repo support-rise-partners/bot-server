@@ -45,6 +45,7 @@ async function saveMessage(sessionId, role, message) {
     }
 }
 
+/*
 async function saveConversationReference(reference) {
     try {
         console.log("📥 Eingehende Referenz:", JSON.stringify(reference, null, 2));
@@ -111,7 +112,9 @@ async function saveConversationReference(reference) {
         console.error("Fehler beim Speichern der Referenz:", error.message);
     }
 }
+*/
 
+/*
 async function getConversationReferenceById(userId) {
     try {
         const normalizedUserId = userId.toLowerCase();
@@ -127,6 +130,7 @@ async function getConversationReferenceById(userId) {
         return null;
     }
 }
+*/
 
 const MESSAGE_HISTORY_WINDOW_MINUTES = 15;
 
@@ -156,4 +160,4 @@ async function getLastMessages(sessionId, limit = 20) {
     }
 }
 
-export { saveMessage, getLastMessages, saveConversationReference, getConversationReferenceById };
+export { saveMessage, getLastMessages /*, saveConversationReference, getConversationReferenceById */ };
