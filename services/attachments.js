@@ -1,0 +1,87 @@
+import fs from 'fs';
+import path from 'path';
+import axios from 'axios';
+import { v4 as uuidv4 } from 'uuid';
+import { MicrosoftAppCredentials } from 'botframework-connector';
+
+const TEMP_DIR = path.resolve('tmp_attachments');
+const FILE_LIFETIME_MINUTES = 15;
+const SERVER_HOST = process.env.SERVER_HOST;
+
+/**
+ * Очищает временную директорию от старых файлов (старше 15 мин)
+ */
+function cleanUpOldFiles() {
+    if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+
+    const now = Date.now();
+    for (const file of fs.readdirSync(TEMP_DIR)) {
+        const filePath = path.join(TEMP_DIR, file);
+        const stats = fs.statSync(filePath);
+        const ageMinutes = (now - stats.mtimeMs) / 60000;
+        if (ageMinutes > FILE_LIFETIME_MINUTES) {
+            fs.unlinkSync(filePath);
+        }
+    }
+}
+
+/**
+ * Сохраняет изображение в tmp и возвращает URL
+ */
+function saveImageToTmp(buffer, extension = 'png') {
+    const fileName = `${uuidv4()}.${extension}`;
+    const filePath = path.join(TEMP_DIR, fileName);
+    fs.writeFileSync(filePath, buffer);
+    return `${SERVER_HOST}/tmp/${fileName}`;
+}
+
+/**
+ * Главная функция: извлекает и сохраняет изображения из context
+ */
+export async function extractImagesFromContext(context) {
+    const attachments = context.activity?.attachments || [];
+    if (!attachments.length) return [];
+
+    cleanUpOldFiles(); // очищаем старые перед началом
+
+    const imageUrls = [];
+
+    for (const attachment of attachments) {
+        let fileBuffer;
+        let extension = 'png';
+
+        if (attachment.contentType.startsWith('image/')) {
+            // Вставленное изображение, нужно авторизоваться
+            const credentials = new MicrosoftAppCredentials(
+                process.env.MicrosoftAppId,
+                process.env.MicrosoftAppPassword
+            );
+            const token = await credentials.getToken();
+
+            const response = await axios.get(attachment.contentUrl, {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'arraybuffer'
+            });
+
+            fileBuffer = Buffer.from(response.data, 'binary');
+            extension = attachment.contentType.split('/')[1] || 'png';
+
+        } else if (attachment.content?.downloadUrl) {
+            // Прикреплённый файл — ссылка уже открыта
+            const response = await axios.get(attachment.content.downloadUrl, {
+                responseType: 'arraybuffer'
+            });
+            fileBuffer = Buffer.from(response.data, 'binary');
+            extension = path.extname(attachment.name || 'png').slice(1) || 'png';
+
+        } else {
+            // Неподдерживаемый тип вложения
+            continue;
+        }
+
+        const publicUrl = saveImageToTmp(fileBuffer, extension);
+        imageUrls.push(publicUrl);
+    }
+
+    return imageUrls;
+}

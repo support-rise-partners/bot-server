@@ -1,3 +1,4 @@
+import { extractImagesFromContext } from '../services/attachments.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -19,19 +20,19 @@ class MyBot extends ActivityHandler {
                 const userText = context.activity.text || '';
                 const sessionId = context.activity.conversation.id;
                 const userName = context.activity.from.name;
+                const imageUrls = await extractImagesFromContext(context);
                 await saveOrUpdateReference(context);
 
                 await context.sendActivities([
                     { type: 'typing' },
                     { type: 'delay', value: 1000 }
                 ]);
-
                 const { reply, functionCall } = await getChatCompletion({
                     sessionId,
                     role: 'user',
                     text: userText,
                     userName,
-                    imageUrls: ["https://www.5.ua/media/pictures/original/194292.jpg?t=1600087834"] // заглушка
+                    imageUrls
                 });
 
                 if (reply && reply.trim() !== '') {
