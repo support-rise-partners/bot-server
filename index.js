@@ -11,6 +11,7 @@ import { MyBot } from './bot/bot.js';
 import notifyUser from './functions/notify_user.js';
 
 const app = express().use(express.json());
+app.use('/tmp', express.static(__dirname + '/tmp_attachments'));
 
 const myBot = new MyBot();
 
