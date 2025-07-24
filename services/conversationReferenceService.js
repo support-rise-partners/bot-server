@@ -1,6 +1,6 @@
 import { TurnContext } from 'botbuilder';
 import { TableClient } from "@azure/data-tables";
-import { getUserInfoById, getUserInfoByEmail } from './graphClient.js';
+import { getUserDataById, getUserInfoByEmail } from './graphClient.js';
 
 const referenceClient = TableClient.fromConnectionString(
   process.env.AZURE_STORAGE_CONNECTION_STRING,
@@ -18,7 +18,7 @@ export async function saveOrUpdateReference(context) {
   if (!aadObjectId || context.activity.conversation?.conversationType !== 'personal') return;
 
   try {
-    const { displayName, email } = await getUserInfoById(aadObjectId);
+    const { displayName, email } = await getUserDataById(aadObjectId);
 
     const entity = {
       partitionKey: aadObjectId,
