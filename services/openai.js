@@ -33,7 +33,9 @@ export async function getChatCompletion({ sessionId, role, text, userName }) {
             content: [{ type: "text", text }, 
                 {
                     type: "image_url",
-                    image_url: "https://www.cryptopro.ru/sites/default/files/images/faq/test_arm-cristekitp_sert_priv_yuzera.jpg"
+                    image_url: {
+                    url: "https://www.windows-faq.de/wp-content/uploads/2019/03/SYSTEM-SERVICE-EXCEPTION.png"
+                    }
                 }]
         };
 
