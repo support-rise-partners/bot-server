@@ -34,7 +34,7 @@ export async function getChatCompletion({ sessionId, role, text, userName }) {
                 {
                     type: "image_url",
                     image_url: {
-                    url: "https://www.windows-faq.de/wp-content/uploads/2019/03/SYSTEM-SERVICE-EXCEPTION.png"
+                    url: "https://lernen.zoner.de/wp-content/uploads/2018/10/entfernen-sie-drahte-mull-oder-andere-unerwunschte-objekte-auf-ihren-fotos.jpg"
                     }
                 }]
         };
