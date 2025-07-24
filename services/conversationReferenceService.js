@@ -1,6 +1,6 @@
 import { TurnContext } from 'botbuilder';
 import { TableClient } from "@azure/data-tables";
-import { getUserDataById, getUserIdByEmail } from './graphClient.js';
+import { getUserDetails, getUserInfoByEmail } from './graphClient.js';
 
 const referenceClient = TableClient.fromConnectionString(
   process.env.AZURE_STORAGE_CONNECTION_STRING,
@@ -18,7 +18,7 @@ export async function saveOrUpdateReference(context) {
   if (!aadObjectId || context.activity.conversation?.conversationType !== 'personal') return;
 
   try {
-    const { displayName, email } = await getUserDataById(aadObjectId);
+    const { displayName, email } = await getUserDetails(aadObjectId);
 
     const entity = {
       partitionKey: aadObjectId,
@@ -41,8 +41,8 @@ export async function saveOrUpdateReference(context) {
  */
 export async function getReferenceByEmail(email) {
   try {
-    const { objectId } = await getUserIdByEmail(email);
-    const entity = await referenceClient.getEntity(objectId, objectId);
+    const { id } = await getUserInfoByEmail(email);
+    const entity = await referenceClient.getEntity(id, id);
     return JSON.parse(entity.reference);
   } catch (err) {
     console.error("❌ Fehler beim Abrufen ConversationReference:", err.message);
