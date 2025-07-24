@@ -31,7 +31,7 @@ const {
   return data.access_token;
 }
 
-export async function getUserDetails(aadObjectId) {
+export async function getUserDataById(aadObjectId) {
   try {
     const token = await getAccessToken();
 
