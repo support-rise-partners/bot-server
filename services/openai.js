@@ -28,7 +28,14 @@ export async function getChatCompletion({ sessionId, role, text, userName }) {
 
         const history = await getLastMessages(sessionId, 20);
 
-        const lastMessage = { role, content: text };
+        let lastMessage = {
+            role,
+            content: [{ type: "text", text }, 
+                {
+                    type: "image_url",
+                    image_url: "https://www.cryptopro.ru/sites/default/files/images/faq/test_arm-cristekitp_sert_priv_yuzera.jpg"
+                }]
+        };
 
         const enrichedSystemPrompt = `${systemPrompt}\n\nZeit jetzt: ${messageTime}\nUsername: ${userName || 'Benutzer'}`;
 
