@@ -16,7 +16,7 @@ export default async function (userName, args) {
         const response = await fetch(powerAutomateUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: args
+            body: JSON.stringify(args)
         });
 
         if (!response.ok) {
