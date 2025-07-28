@@ -5,6 +5,9 @@ import { getEmailBySessionId } from '../services/conversationReferenceService.js
 export default async function (sessionId, args) {
     try {
         console.log("Creating ticket with arguments:", args);
+        if (typeof args === "string") {
+            args = JSON.parse(args);
+        }
         const email = await getEmailBySessionId(sessionId);
         args.email = email;
 
