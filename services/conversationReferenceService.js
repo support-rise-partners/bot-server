@@ -51,16 +51,25 @@ export async function getReferenceByEmail(email) {
 }
 
 /**
- * Holt die E-Mail-Adresse anhand der SessionId (AAD-Objekt-ID).
- * @param {string} sessionId
+ * Holt die E-Mail-Adresse anhand des Benutzernamens.
+ * @param {string} userName
  * @returns {Promise<string|null>} Email oder null
  */
-export async function getEmailBySessionId(sessionId) {
+export async function getEmailByUserName(userName) {
   try {
-    const entity = await referenceClient.getEntity(sessionId, sessionId);
-    return entity.email || null;
+    const entities = referenceClient.listEntities({
+      queryOptions: {
+        filter: `name eq '${userName}'`
+      }
+    });
+
+    for await (const entity of entities) {
+      return entity.email || null;
+    }
+
+    return null; // Falls kein Treffer
   } catch (err) {
-    console.error("❌ Fehler beim Abrufen der E-Mail anhand der SessionId:", err.message);
+    console.error("❌ Fehler beim Abrufen der E-Mail anhand des Benutzernamens:", err.message);
     return null;
   }
 }

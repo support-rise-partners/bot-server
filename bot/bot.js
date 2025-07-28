@@ -48,7 +48,7 @@ class MyBot extends ActivityHandler {
                         { type: 'delay', value: 500 }
                     ]);
                     const result = await import(`../functions/${functionCall.name}.js`);
-                    const functionReply = await result.default(sessionId, functionCall.arguments);
+                    const functionReply = await result.default(userName, functionCall.arguments);
 
                     if (functionReply) {
                         await context.sendActivity(MessageFactory.text(functionReply));

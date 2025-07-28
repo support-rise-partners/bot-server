@@ -2,13 +2,13 @@ import fetch from 'node-fetch';
 import { getChatCompletion } from '../services/openai.js';
 import { getEmailBySessionId } from '../services/conversationReferenceService.js';
 
-export default async function (sessionId, args) {
+export default async function (userName, args) {
     try {
         console.log("Creating ticket with arguments:", args);
         if (typeof args === "string") {
             args = JSON.parse(args);
         }
-        const email = await getEmailBySessionId(sessionId);
+        const email = await getEmailByUserName(userName);
         args.email = email;
 
         const powerAutomateUrl = 'https://prod-23.germanywestcentral.logic.azure.com:443/workflows/ab40992aa0204ec19316157f28653d28/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=g8H_FeIAGwIVQfy_3nQGEeguiy7p4tKfI4u6jHsHmB8';
