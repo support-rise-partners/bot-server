@@ -1,6 +1,6 @@
 import fetch from 'node-fetch';
 import { getChatCompletion } from '../services/openai.js';
-import { getEmailBySessionId } from '../services/conversationReferenceService.js';
+import { getEmailByUserName } from '../services/conversationReferenceService.js';
 
 export default async function (userName, args) {
     try {
