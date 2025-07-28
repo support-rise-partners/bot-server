@@ -66,7 +66,9 @@ export async function extractImagesFromContext(context) {
 
             fileBuffer = Buffer.from(response.data, 'binary');
             extension = attachment.contentType.split('/')[1] || 'png';
-            if (attachment.name) fileNotices.push(`angehängte Datei: ${attachment.name} (Format .${extension})`);
+
+            const fileName = attachment.name || `Bild_${Date.now()}.${extension}`;
+            fileNotices.push(`angehängte Datei: ${fileName} (Format .${extension})`);
 
         } else if (
             attachment.content?.downloadUrl &&
