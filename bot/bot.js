@@ -17,10 +17,13 @@ class MyBot extends ActivityHandler {
         super();
         this.onMessage(async (context, next) => {
             try {
-                const userText = context.activity.text || '';
+                let userText = context.activity.text || '';
                 const sessionId = context.activity.conversation.id;
                 const userName = context.activity.from.name;
-                const imageUrls = await extractImagesFromContext(context);
+                const { imageUrls, fileNotices } = await extractImagesFromContext(context);
+                if (fileNotices.length > 0) {
+                    userText += '\n' + fileNotices.join('\n');
+                }
                 await saveOrUpdateReference(context);
 
                 await context.sendActivities([

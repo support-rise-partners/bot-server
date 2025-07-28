@@ -39,8 +39,9 @@ function saveImageToTmp(buffer, extension = 'png') {
  * Главная функция: извлекает и сохраняет изображения из context
  */
 export async function extractImagesFromContext(context) {
+    const fileNotices = [];
     const attachments = context.activity?.attachments || [];
-    if (!attachments.length) return [];
+    if (!attachments.length) return { imageUrls: [], fileNotices: [] };
 
     cleanUpOldFiles(); // очищаем старые перед началом
 
@@ -76,8 +77,11 @@ export async function extractImagesFromContext(context) {
             fileBuffer = Buffer.from(response.data, 'binary');
             extension = path.extname(attachment.name).slice(1) || 'png';
 
+        } else if (attachment.name && !attachment.contentType.startsWith("image/")) {
+            const ext = path.extname(attachment.name);
+            fileNotices.push(`angehängte Datei im Format ${ext}`);
+            continue;
         } else {
-            // Неподдерживаемый тип вложения
             continue;
         }
 
@@ -85,5 +89,5 @@ export async function extractImagesFromContext(context) {
         imageUrls.push(publicUrl);
     }
 
-    return imageUrls;
+    return { imageUrls, fileNotices };
 }
