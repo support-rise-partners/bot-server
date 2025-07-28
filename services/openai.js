@@ -13,6 +13,39 @@ const apiVersion = process.env.OPENAI_VERSION;
 
 const client = new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion });
 
+export async function getImageDescription(imageUrls) {
+    if (!Array.isArray(imageUrls) || imageUrls.length === 0) return null;
+
+    const messages = [
+        {
+            role: "system",
+            content: "Beschreibe den Inhalt der folgenden Bilder möglichst genau. Achte auf erkennbare Objekte, Farben, Texte und visuelle Details. Was zeigen die Bilder? Gibt es erkennbare Zusammenhänge oder Auffälligkeiten?"
+        },
+        {
+            role: "user",
+            content: imageUrls.map(url => ({
+                type: "image_url",
+                image_url: { url }
+            }))
+        }
+    ];
+
+    try {
+        const response = await client.chat.completions.create({
+            model: deployment,
+            messages,
+            max_tokens: 500,
+            temperature: 0.7,
+            top_p: 0.9
+        });
+
+        return response.choices?.[0]?.message?.content || null;
+    } catch (error) {
+        console.error("❌ Fehler beim Abrufen der Bildbeschreibung:", error.message);
+        return null;
+    }
+}
+
 export async function getChatCompletion({ sessionId, role, text, userName, imageUrls }) {
     try {
         const functions = [functionSchema];
@@ -67,6 +100,15 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
         });
 
         await saveMessage(sessionId, role, text);
+
+        let imageDescription = null;
+        if (Array.isArray(imageUrls) && imageUrls.length > 0) {
+            imageDescription = await getImageDescription(imageUrls);
+            if (imageDescription) {
+                await saveMessage(sessionId, "system", imageDescription);
+            }
+        }
+
         const choice = response.choices[0];
         if (!choice.message.function_call && choice.message.content) {
             await saveMessage(sessionId, 'assistant', choice.message.content);
