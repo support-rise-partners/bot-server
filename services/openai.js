@@ -48,7 +48,7 @@ export async function getImageDescription(imageUrls) {
 
 export async function getChatCompletion({ sessionId, role, text, userName, imageUrls }) {
     try {
-        const functions = [functionSchema];
+        const functions = functionSchema;
 
         const messageTime = new Date().toLocaleString('de-DE', {
             hour: '2-digit',
