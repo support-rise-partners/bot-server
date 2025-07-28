@@ -22,7 +22,7 @@ class MyBot extends ActivityHandler {
                 const userName = context.activity.from.name;
                 const { imageUrls, fileNotices } = await extractImagesFromContext(context);
                 if (fileNotices.length > 0) {
-                    userText += '\n' + fileNotices.join('\n');
+                    userText += ' \n ' + fileNotices.join(', ');
                 }
                 await saveOrUpdateReference(context);
 

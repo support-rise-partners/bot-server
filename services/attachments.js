@@ -79,7 +79,7 @@ export async function extractImagesFromContext(context) {
 
         } else if (attachment.name && !attachment.contentType.startsWith("image/")) {
             const ext = path.extname(attachment.name);
-            fileNotices.push(`angehängte Datei im Format ${ext}`);
+            fileNotices.push(`angehängte Datei: ${attachment.name} (Format ${ext})`);
             continue;
         } else {
             continue;
