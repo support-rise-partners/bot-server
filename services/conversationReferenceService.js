@@ -49,3 +49,18 @@ export async function getReferenceByEmail(email) {
     return null;
   }
 }
+
+/**
+ * Holt die E-Mail-Adresse anhand der SessionId (AAD-Objekt-ID).
+ * @param {string} sessionId
+ * @returns {Promise<string|null>} Email oder null
+ */
+export async function getEmailBySessionId(sessionId) {
+  try {
+    const entity = await referenceClient.getEntity(sessionId, sessionId);
+    return entity.email || null;
+  } catch (err) {
+    console.error("❌ Fehler beim Abrufen der E-Mail anhand der SessionId:", err.message);
+    return null;
+  }
+}

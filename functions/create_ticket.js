@@ -1,11 +1,13 @@
 import fetch from 'node-fetch';
 import { getChatCompletion } from '../services/openai.js';
+import { getEmailBySessionId } from '../services/conversationReferenceService.js';
 
 export default async function (sessionId, args) {
     try {
         console.log("Creating ticket with arguments:", args);
+        const email = await getEmailBySessionId(sessionId);
+        args.email = email;
 
-        // Replace 'powerAutomateUrl' with the actual URL from your Power Automate Flow
         const powerAutomateUrl = 'https://prod-23.germanywestcentral.logic.azure.com:443/workflows/ab40992aa0204ec19316157f28653d28/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=g8H_FeIAGwIVQfy_3nQGEeguiy7p4tKfI4u6jHsHmB8';
 
         const response = await fetch(powerAutomateUrl, {
