@@ -2,7 +2,7 @@ import fetch from 'node-fetch';
 import { getChatCompletion } from '../services/openai.js';
 import { getEmailByUserName } from '../services/conversationReferenceService.js';
 
-export default async function (userName, args) {
+export default async function (sessionId, userName, args) {
     try {
         console.log("Creating ticket with arguments:", args);
         if (typeof args === "string") {
