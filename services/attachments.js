@@ -50,49 +50,45 @@ export async function extractImagesFromContext(context) {
     for (const attachment of attachments) {
         let fileBuffer;
         let extension = 'png';
-        try {
-            const isInlineImage = attachment.contentType?.startsWith('image/');
-            const isUploadedImage = attachment.content?.downloadUrl;
 
-            if (!isInlineImage && !isUploadedImage) {
-                if (attachment.name && !attachment.contentType?.startsWith("image/")) {
-                    const ext = path.extname(attachment.name);
-                    fileNotices.push(`angehängte Datei: ${attachment.name} (Format ${ext})`);
-                }
-                continue;
-            }
+        if (attachment.contentType.startsWith('image/')) {
+            // Вставленное изображение, нужно авторизоваться
+            const credentials = new MicrosoftAppCredentials(
+                process.env.MicrosoftAppId,
+                process.env.MicrosoftAppPassword
+            );
+            const token = await credentials.getToken();
 
-            if (isInlineImage) {
-                const credentials = new MicrosoftAppCredentials(
-                    process.env.MicrosoftAppId,
-                    process.env.MicrosoftAppPassword
-                );
-                const token = await credentials.getToken();
+            const response = await axios.get(attachment.contentUrl, {
+                headers: { Authorization: `Bearer ${token}` },
+                responseType: 'arraybuffer'
+            });
 
-                const response = await axios.get(attachment.contentUrl, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    responseType: 'arraybuffer'
-                });
+            fileBuffer = Buffer.from(response.data, 'binary');
+            extension = attachment.contentType.split('/')[1] || 'png';
 
-                fileBuffer = Buffer.from(response.data, 'binary');
-                extension = attachment.contentType.split('/')[1] || 'png';
-            } else if (isUploadedImage) {
-                const response = await axios.get(attachment.content.downloadUrl, {
-                    responseType: 'arraybuffer'
-                });
-                fileBuffer = Buffer.from(response.data, 'binary');
+        } else if (
+            attachment.content?.downloadUrl &&
+            attachment.name?.match(/\.(png|jpe?g|gif|bmp|webp)$/i)
+        ) {
+            const response = await axios.get(attachment.content.downloadUrl, {
+                responseType: 'arraybuffer'
+            });
+            fileBuffer = Buffer.from(response.data, 'binary');
+            const rawExt = path.extname(attachment.name).slice(1).toLowerCase();
+            const allowedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'];
+            extension = allowedExts.includes(rawExt) ? rawExt : 'png';
 
-                const rawExt = path.extname(attachment.name || '').slice(1).toLowerCase();
-                const allowedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'];
-                extension = allowedExts.includes(rawExt) ? rawExt : (attachment.contentType?.split('/')[1] || 'png');
-            }
-
-            const publicUrl = saveImageToTmp(fileBuffer, extension);
-            imageUrls.push(publicUrl);
-        } catch (err) {
-            console.warn("Fehler beim Verarbeiten eines Anhangs:", err.message);
+        } else if (attachment.name && !attachment.contentType.startsWith("image/")) {
+            const ext = path.extname(attachment.name);
+            fileNotices.push(`angehängte Datei: ${attachment.name} (Format ${ext})`);
+            continue;
+        } else {
             continue;
         }
+
+        const publicUrl = saveImageToTmp(fileBuffer, extension);
+        imageUrls.push(publicUrl);
     }
 
     return { imageUrls, fileNotices };
