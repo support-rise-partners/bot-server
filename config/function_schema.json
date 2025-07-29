@@ -18,7 +18,7 @@
   ,
   {
     "name": "search_ticket_by_id",
-    "description": "Sucht Tickets nach Status, ID, Datum (Zeitraum von/bis). Die Suche ist auf Tickets beschränkt, die vom anfragenden Benutzer erstellt wurden.",
+    "description": "Sucht Ticketdetails nach Status, ID, Datum (Zeitraum von/bis). Die Suche ist auf Tickets beschränkt, die vom anfragenden Benutzer erstellt wurden. ",
     "parameters": {
       "type": "object",
       "properties": {
