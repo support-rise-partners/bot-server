@@ -36,7 +36,7 @@ class MyBot extends ActivityHandler {
                         userName,
                         imageUrls
                     }),
-                    new Promise(resolve => setTimeout(resolve, 500))
+                    new Promise(resolve => setTimeout(resolve, 5000))
                 ]);
 
                 const { reply, functionCall } = response;
