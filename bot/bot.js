@@ -36,7 +36,7 @@ class MyBot extends ActivityHandler {
                         userName,
                         imageUrls
                     }),
-                    new Promise(resolve => setTimeout(resolve, 1500))
+                    new Promise(resolve => setTimeout(resolve, 10))
                 ]);
 
                 const { reply, functionCall } = response;
@@ -50,7 +50,7 @@ class MyBot extends ActivityHandler {
 
                     const [functionModule] = await Promise.all([
                         import(`../functions/${functionCall.name}.js`),
-                        new Promise(resolve => setTimeout(resolve, 10))
+                        new Promise(resolve => setTimeout(resolve, 1000))
                     ]);
 
                     const functionReply = await functionModule.default(sessionId, userName, functionCall.arguments);
