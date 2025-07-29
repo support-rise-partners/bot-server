@@ -66,6 +66,9 @@ export async function extractImagesFromContext(context) {
 
             fileBuffer = Buffer.from(response.data, 'binary');
             extension = attachment.contentType.split('/')[1] || 'png';
+            if (!extension || extension === '*') {
+                extension = 'png';
+            }
 
         } else if (
             attachment.content?.downloadUrl &&
