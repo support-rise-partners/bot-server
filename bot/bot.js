@@ -26,34 +26,29 @@ class MyBot extends ActivityHandler {
                 }
                 await saveOrUpdateReference(context);
 
-                await context.sendActivity({ type: 'typing' });
-
-                const [response] = await Promise.all([
-                    getChatCompletion({
-                        sessionId,
-                        role: 'user',
-                        text: userText,
-                        userName,
-                        imageUrls
-                    }),
-                    new Promise(resolve => setTimeout(resolve, 10))
+                await context.sendActivities([
+                    { type: 'typing' },
+                    { type: 'delay', value: 1000 }
                 ]);
-
-                const { reply, functionCall } = response;
+                const { reply, functionCall } = await getChatCompletion({
+                    sessionId,
+                    role: 'user',
+                    text: userText,
+                    userName,
+                    imageUrls
+                });
 
                 if (reply && reply.trim() !== '') {
                     await context.sendActivity(MessageFactory.text(reply));
                 }
 
                 if (functionCall) {
-                    await context.sendActivity({ type: 'typing' });
-
-                    const [functionModule] = await Promise.all([
-                        import(`../functions/${functionCall.name}.js`),
-                        new Promise(resolve => setTimeout(resolve, 1000))
+                    await context.sendActivities([
+                        { type: 'typing' },
+                        { type: 'delay', value: 500 }
                     ]);
-
-                    const functionReply = await functionModule.default(sessionId, userName, functionCall.arguments);
+                    const result = await import(`../functions/${functionCall.name}.js`);
+                    const functionReply = await result.default(sessionId, userName, functionCall.arguments);
 
                     if (functionReply) {
                         await context.sendActivity(MessageFactory.text(functionReply));
