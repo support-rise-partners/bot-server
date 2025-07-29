@@ -105,7 +105,7 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
         if (Array.isArray(imageUrls) && imageUrls.length > 0) {
             imageDescription = await getImageDescription(imageUrls);
             if (imageDescription) {
-                imageDescription = "Bildbeschreibung: " + imageDescription;
+                imageDescription = `Bild Link:\n${imageUrls.map(url => `${url}`).join('\n')}\nBildbeschreibung: ${imageDescription}`;
                 await saveMessage(sessionId, "system", imageDescription);
             }
         }
