@@ -18,17 +18,43 @@
   ,
   {
     "name": "search_ticket_by_id",
-    "description": "Durchsucht vorhandene Tickets nach ID. Die Suche ist auf Tickets beschränkt, die vom anfragenden Benutzer erstellt wurden.",
+    "description": "Sucht Tickets nach Status, ID, Datum (Zeitraum von/bis). Die Suche ist auf Tickets beschränkt, die vom anfragenden Benutzer erstellt wurden.",
     "parameters": {
       "type": "object",
       "properties": {
         "ticket_id": {
           "type": "array",
-          "items": { "type": "integer" },
-          "description": "Liste der gesuchten Ticket-IDs (mehrere IDs möglich, z. B. [1010, 1023])"
+          "items": {
+            "type": "integer"
+          },
+          "description": "Liste von Ticketnummern zur gezielten Suche nach bestimmten Tickets. Z.B. [1235, 2568]"
+        },
+        "status": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Offen",
+              "In Bearbeitung",
+              "Zur Durchsicht",
+              "Blocked",
+              "Zur Bestellung",
+              "Erledigt"
+            ]
+          },
+          "description": "Liste von Ticketstatus zur Filterung"
+        },
+        "created_from": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Startdatum (inklusive) für den gewünschten Zeitraum im Format YYYY-MM-DDTHH:MM:SSZ"
+        },
+        "created_to": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Enddatum (inklusive) für den gewünschten Zeitraum im Format YYYY-MM-DDTHH:MM:SSZ"
         }
-      },
-      "required": ["ticket_id"]
+      }
     }
   }
 ]
