@@ -51,4 +51,35 @@
       }
     }
   }
+  ,
+  {
+    "name": "announce_visit",
+    "description": "Kündigt einen Besuch an, damit die Verwaltung rechtzeitig informiert ist.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "besuchszeit": {
+          "type": "string",
+          "description": "Datum und Uhrzeit des Besuchs im benutzerfreundlichen Format (z. B. 15. August 2025, 10:30 Uhr)"
+        },
+        "besucherinfo": {
+          "type": "string",
+          "description": "Informationen über den/die Besucher:in (z. B. Name, Firma, Funktion)"
+        },
+        "ansprechperson": {
+          "type": "string",
+          "description": "Ansprechperson(en) im Unternehmen"
+        },
+        "besuchszweck": {
+          "type": "string",
+          "description": "Zweck oder Thema des Besuchs"
+        },
+        "zusatzinfo": {
+          "type": "string",
+          "description": "Zusätzliche Informationen für die Verwaltung (optional)"
+        }
+      },
+      "required": ["besuchszeit", "besucherinfo", "ansprechperson", "besuchszweck"]
+    }
+  }
 ]
