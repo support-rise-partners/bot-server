@@ -46,9 +46,19 @@ class MyBot extends ActivityHandler {
                 }
 
                 if (functionCall) {
-                    const typingInterval = setInterval(() => {
-                        context.sendActivity({ type: 'typing' });
-                    }, 1000);
+                    let typingActive = true;
+                    const typingLoop = async () => {
+                        while (typingActive) {
+                            try {
+                                await context.sendActivity({ type: 'typing' });
+                            } catch (err) {
+                                console.error('❌ Fehler beim Senden des "typing"-Events:', err.message);
+                                break;
+                            }
+                            await new Promise(res => setTimeout(res, 1000));
+                        }
+                    };
+                    typingLoop();
 
                     try {
                         const [functionModule] = await Promise.all([
@@ -62,7 +72,7 @@ class MyBot extends ActivityHandler {
                             await context.sendActivity(MessageFactory.text(functionReply));
                         }
                     } finally {
-                        clearInterval(typingInterval);
+                        typingActive = false;
                     }
                 }
 
