@@ -60,7 +60,7 @@
       "properties": {
         "besuchszeit": {
           "type": "string",
-          "description": "Datum mit Uhrzeit des Besuchs im benutzerfreundlichen Format (z. B. 15. August 2025, 10:30 Uhr)"
+          "description": "Datum mit Uhrzeit (Pflichtangabe) der Ankunft im benutzerfreundlichen Format (z. B. 15. August 2025, 10:30 Uhr) und Dauer"
         },
         "besucherinfo": {
           "type": "string",
