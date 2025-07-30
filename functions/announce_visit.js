@@ -13,13 +13,16 @@ export default async function (sessionId, userName, args) {
 
         const email = await getEmailByUserName(userName);
         const requestBody = {
-            besuchszeit: args.dateTime,
-            besucherinfo: args.besucherInfo,
-            ansprechperson: args.ansprechpersonen,
-            besuchszweck: args.thema,
-            zusatzinfo: args.zusatzinfo || "",
+            besuchszeit: args.besuchszeit || args.dateTime,
+            besucherinfo: args.besucherinfo || args.besucherInfo,
+            ansprechperson: args.ansprechperson || args.ansprechpersonen,
+            besuchszweck: args.besuchszweck || args.thema,
             email
         };
+
+        if (args.zusatzinfo) {
+            requestBody.zusatzinfo = args.zusatzinfo;
+        }
 
         const powerAutomateUrl = 'https://prod-05.germanywestcentral.logic.azure.com:443/workflows/733ba3d3c79e462c8025b446dbed8755/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=H8I6TxmV6JTeP2z1T2i6iFxSb3rcQoHAYl3Bfu5LDMU';
 
