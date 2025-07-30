@@ -58,12 +58,12 @@ class MyBot extends ActivityHandler {
                             await new Promise(res => setTimeout(res, 1000));
                         }
                     };
-                    typingLoop();
+                    const typingTask = typingLoop();
 
                     try {
                         const [functionModule] = await Promise.all([
                             import(`../functions/${functionCall.name}.js`),
-                            new Promise(resolve => setTimeout(resolve, 1000))
+                            new Promise(resolve => setTimeout(resolve, 500))
                         ]);
 
                         const functionReply = await functionModule.default(sessionId, userName, functionCall.arguments);
@@ -73,6 +73,7 @@ class MyBot extends ActivityHandler {
                         }
                     } finally {
                         typingActive = false;
+                        await typingTask;
                     }
                 }
 

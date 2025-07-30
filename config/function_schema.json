@@ -54,13 +54,13 @@
   ,
   {
     "name": "announce_visit",
-    "description": "Kündigt einen Besuch an, damit die Verwaltung rechtzeitig informiert ist.",
+    "description": "Kündigt einen Besuch an, damit die Verwaltung rechtzeitig informiert ist. Frage nach, falls Infos fehlen",
     "parameters": {
       "type": "object",
       "properties": {
         "besuchszeit": {
           "type": "string",
-          "description": "Datum und Uhrzeit des Besuchs im benutzerfreundlichen Format (z. B. 15. August 2025, 10:30 Uhr)"
+          "description": "Datum mit Uhrzeit des Besuchs im benutzerfreundlichen Format (z. B. 15. August 2025, 10:30 Uhr)"
         },
         "besucherinfo": {
           "type": "string",
@@ -76,7 +76,7 @@
         },
         "zusatzinfo": {
           "type": "string",
-          "description": "Zusätzliche Informationen für die Verwaltung (optional)"
+          "description": "Zusätzliche Informationen für die Verwaltung (nur wenn vom User angegeben)"
         }
       },
       "required": ["besuchszeit", "besucherinfo", "ansprechperson", "besuchszweck"]
