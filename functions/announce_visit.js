@@ -13,10 +13,10 @@ export default async function (sessionId, userName, args) {
 
         const email = await getEmailByUserName(userName);
         const requestBody = {
-            dateTime: args.dateTime,
-            besucherInfo: args.besucherInfo,
-            ansprechpersonen: args.ansprechpersonen,
-            thema: args.thema,
+            besuchszeit: args.dateTime,
+            besucherinfo: args.besucherInfo,
+            ansprechperson: args.ansprechpersonen,
+            besuchszweck: args.thema,
             zusatzinfo: args.zusatzinfo || "",
             email
         };
