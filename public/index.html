@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        .form-feedback {
+            max-width: 600px;
+            width: 100%;
+            margin: 0 auto;
+            display: block;
+            box-sizing: border-box;
+        }
+        .form-feedback * {
+            box-sizing: border-box;
+        }
+        .form-feedback-box {
+            width: 100%;
+            border: 1px solid red;
+            padding: 30px 30px 30px 50%;
+            background: url('color4.1.png') no-repeat;
+            background-position: 30px 50%;
+            background-size: 200px auto;
+        }
+        .form-feedback h1 {
+            margin: 0 0 20px;
+        }
+        .form-feedback textarea {
+            width: 100%;
+            margin: 0 0 20px;
+            padding: 10px;
+            border: 1px solid red;
+        }
+        .form-feedback [type="submit"] {
+            background: blue;
+            color: white;
+            width: 100px;
+            height: 40px;
+            margin: 0 0 0 auto;
+            padding: 10px;
+            text-align: center;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <form action="#" class="form-feedback">
+        <div class="form-feedback-box">
+            <h1>Send your feedback</h1>
+            <textarea placeholder="Your message"></textarea>
+            <input type="submit" value="Send">
+        </div>
+    </form>
+</body>
+</html>
