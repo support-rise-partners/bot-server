@@ -47,6 +47,9 @@ export async function notifyUserHandler(req, res) {
         const aiReply = await simpleChatCompletion(systemPromptText, userPromptText);
         const emailsArray = extractEmailsFromAI(aiReply);
 
+        console.log("🤖 AI Reply:", aiReply);
+        console.log("📧 Extrahierte Emails aus AI:", emailsArray);
+
         let conversationReferences = [];
         if (aiReply && aiReply.trim() === '__ALL__') {
             conversationReferences = await getReferenceByEmail('__ALL__');
@@ -65,6 +68,19 @@ export async function notifyUserHandler(req, res) {
 
         const sent = [];
         const failed = [];
+
+        // Falls spezifische Emails angefragt wurden, zeige und markiere diejenigen ohne ConversationReference
+        if (!(aiReply && aiReply.trim() === '__ALL__')) {
+            const foundEmails = conversationReferences
+                .map(r => (r?.user?.email || '').toLowerCase())
+                .filter(Boolean);
+            const inputEmails = emailsArray.map(e => e.toLowerCase());
+            const missingEmails = inputEmails.filter(e => !foundEmails.includes(e));
+            if (missingEmails.length) {
+                console.warn('⚠️ Keine ConversationReference gefunden für folgende Emails:', missingEmails);
+                failed.push(...missingEmails);
+            }
+        }
 
         for (const conversationReference of conversationReferences) {
             try {
@@ -95,6 +111,9 @@ export async function notifyUserHandler(req, res) {
                 failed.push(refEmail);
             }
         }
+
+        console.log("✅ Erfolgreich gesendet an:", sent);
+        console.log("❌ Fehler beim Senden an:", failed);
 
         return res.status(200).json({ status: "done", sent, failed });
     } catch (error) {
