@@ -1,5 +1,7 @@
 import { getChatCompletion } from '../services/openaiService.js';
 import { notifyUserHandler } from './notify_user.js';
+import { getEmailByUserName } from '../services/conversationReferenceService.js';
+import { isAdmin } from '../config/roles.js';
 
 /**
  * Wrapper zum Versenden von Nachrichten aus dem Chat-Kontext.
@@ -12,6 +14,16 @@ import { notifyUserHandler } from './notify_user.js';
  * @returns {Promise<{ code: number, status: string, sent: string[], failed: string[] }>} Ergebnis des Versands
  */
 export default async function notifyUsersFromChat(sessionId, userName, args) {
+  const email = await getEmailByUserName(userName);
+  if (!isAdmin(email)) {
+    const aiResponse = await getChatCompletion({
+      sessionId: sessionId,
+      role: 'system',
+      text: "Du brauchst administratorrechte, um diese Funktion zu nutzen"
+    });
+    return aiResponse;
+  }
+
   if (typeof args.recipients !== 'string' || !args.recipients.trim()) {
     throw new Error("'recipients' must be a non-empty string");
   }
