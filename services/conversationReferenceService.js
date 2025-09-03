@@ -35,19 +35,63 @@ export async function saveOrUpdateReference(context) {
 }
 
 /**
- * Holt ConversationReference anhand der Benutzer-Email.
- * @param {string} email
- * @returns {Promise<Object|null>} ConversationReference oder null
+ * Holt ConversationReference anhand der Benutzer-Email(s) oder gibt alle zurück.
+ * @param {string|Array<string>|{all:true}} emails
+ * @returns {Promise<Object|Array<Object>|null>} ConversationReference(s) oder null/[]
  */
-export async function getReferenceByEmail(email) {
+export async function getReferenceByEmail(emails) {
   try {
-    const { id } = await getUserInfoByEmail(email);
-    const entity = await referenceClient.getEntity(id, id);
-    return JSON.parse(entity.reference);
+    // Case 1: Request ALL references
+    if (emails === '*' || emails === '__ALL__' || (emails && typeof emails === 'object' && emails.all === true)) {
+      const allMap = await getAllReferences();
+      return Object.values(allMap);
+    }
+
+    // Case 2: Array of emails → return array of references
+    if (Array.isArray(emails)) {
+      const results = [];
+      for (const email of emails) {
+        if (!email) continue;
+        try {
+          const { id } = await getUserInfoByEmail(email);
+          const entity = await referenceClient.getEntity(id, id);
+          results.push(JSON.parse(entity.reference));
+        } catch (err) {
+          // Skip missing/errored entries, continue
+          console.error(`⚠️ Keine ConversationReference für ${email}:`, err.message);
+        }
+      }
+      return results;
+    }
+    // Fallback: unsupported type → empty array
+    return [];
   } catch (err) {
     console.error("❌ Fehler beim Abrufen ConversationReference:", err.message);
-    return null;
+    return Array.isArray(emails) || emails === '*' || emails === '__ALL__' || (emails && emails.all === true) ? [] : null;
   }
+}
+
+/**
+ * Gibt eine Map aller ConversationReferences zurück: { [emailLowercase]: ConversationReference }
+ * @returns {Promise<Object>} Map von Email zu ConversationReference
+ */
+export async function getAllReferences() {
+  const map = {};
+  try {
+    const entities = referenceClient.listEntities();
+    for await (const entity of entities) {
+      const email = (entity.email || '').toLowerCase();
+      if (!email) continue;
+      try {
+        map[email] = JSON.parse(entity.reference);
+      } catch (e) {
+        console.error('⚠️ Konnte Reference nicht parsen für', email, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('❌ Fehler beim Auflisten aller ConversationReferences:', err.message);
+  }
+  return map;
 }
 
 /**
