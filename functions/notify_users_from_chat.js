@@ -13,7 +13,23 @@ import { isAdmin } from '../config/roles.js';
  * @param {object} args        Object containing recipients and message
  * @returns {Promise<{ code: number, status: string, sent: string[], failed: string[] }>} Ergebnis des Versands
  */
-export default async function notifyUsersFromChat(sessionId, userName, args) {
+export default async function (sessionId, userName, args) {
+  const prefixedMessage = `Informiere den User: ${args?.message || ''}`;
+
+  const fakeReq = { body: { emails: args?.recipients || '', message: prefixedMessage || '' } };
+  console.log("📤 NotifyUserHandler call with emails:", fakeReq.body.emails, "message:", fakeReq.body.message);
+  let result;
+  const fakeRes = {
+    status(code) {
+      this.statusCode = code || 200;
+      return this;
+    },
+    json(payload) {
+      result = { code: this.statusCode || 200, ...payload };
+      return result;
+    }
+  };
+
   const email = await getEmailByUserName(userName);
   if (!isAdmin(email)) {
     const aiResponse = await getChatCompletion({
@@ -30,22 +46,6 @@ export default async function notifyUsersFromChat(sessionId, userName, args) {
   if (typeof args.message !== 'string' || !args.message.trim()) {
     throw new Error("'message' must be a non-empty string");
   }
-
-  const prefixedMessage = `Informiere den User: ${args.message}`;
-
-  // Fake req/res, damit wir den bestehenden Express-Handler wiederverwenden können
-  const fakeReq = { body: { emails: args.recipients, message: prefixedMessage } };
-  let result;
-  const fakeRes = {
-    status(code) {
-      this.statusCode = code;
-      return this;
-    },
-    json(payload) {
-      result = { code: this.statusCode, ...payload };
-      return result;
-    }
-  };
 
   await notifyUserHandler(fakeReq, fakeRes);
 
