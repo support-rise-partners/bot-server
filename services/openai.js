@@ -126,3 +126,25 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
         };
     }
 }
+
+// Simple chat completion for single-turn prompts
+export async function simpleChatCompletion(systemPromptText, userPromptText) {
+    const messages = [
+        { role: "system", content: systemPromptText },
+        { role: "user", content: userPromptText }
+    ];
+    try {
+        const response = await client.chat.completions.create({
+            model: deployment,
+            messages,
+            max_tokens: 1000,
+            temperature: 0.4,
+            top_p: 1.0
+        });
+        // Return assistant's reply content string, or empty string if missing
+        return response.choices?.[0]?.message?.content || "";
+    } catch (error) {
+        console.error("❌ Fehler bei simpleChatCompletion:", error.message);
+        return "";
+    }
+}
