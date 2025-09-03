@@ -15,7 +15,7 @@ export default async function (sessionId, userName, args) {
             email
         };
 
-        const powerAutomateUrl = 'https://prod-02.germanywestcentral.logic.azure.com:443/workflows/a909b6aa1391489db276232bad6b210c/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=JcKpYCJYixVMh7kayCzdp36JWmwMgRqfSDtaU59DN4E';
+        const powerAutomateUrl = 'https://defaultf70052617df14a29b0f88bb1e67576.23.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/a909b6aa1391489db276232bad6b210c/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=lUrK_tT3ciD-3W3yHujNibmUk2eCZVAKJByji-fgkMA';
 
         const response = await fetch(powerAutomateUrl, {
             method: 'POST',

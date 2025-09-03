@@ -24,7 +24,7 @@ export default async function (sessionId, userName, args) {
             requestBody.zusatzinfo = args.zusatzinfo;
         }
 
-        const powerAutomateUrl = 'https://prod-05.germanywestcentral.logic.azure.com:443/workflows/733ba3d3c79e462c8025b446dbed8755/triggers/manual/paths/invoke?api-version=2016-06-01&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=H8I6TxmV6JTeP2z1T2i6iFxSb3rcQoHAYl3Bfu5LDMU';
+        const powerAutomateUrl = 'https://defaultf70052617df14a29b0f88bb1e67576.23.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/733ba3d3c79e462c8025b446dbed8755/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=ZRCc3W_AmfgYJ_b8kvfjuyhy2BCydxwbrynRDVKAlEM';
 
         const response = await fetch(powerAutomateUrl, {
             method: 'POST',
