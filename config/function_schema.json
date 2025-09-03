@@ -80,5 +80,23 @@
       },
       "required": ["besuchszeit", "besucherinfo", "ansprechperson", "besuchszweck"]
     }
-  }
+  },
+  {
+    "name": "notify_user",
+    "description": "Sendet eine Textnachricht über Risy an einen oder mehrere Mitarbeiter.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "recipients": {
+                "type": "string",
+                "description": "Empfänger der Nachricht. Eine Auflistung der Namen und/oder E-Mail-Adressen oder ein Ausdruck, der ALLE Mitarbeiter bezeichnet."
+            },
+            "message": {
+                "type": "string",
+                "description": "Der Inhalt der Nachricht, die an die angegebenen Empfänger gesendet werden soll."
+            }
+        },
+        "required": ["recipients", "message"]
+    }
+}
 ]
