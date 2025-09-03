@@ -50,18 +50,19 @@ export async function notifyUserHandler(req, res) {
         console.log("🤖 AI Reply:", aiReply);
         console.log("📧 Extrahierte Emails aus AI:", emailsArray);
 
-        let conversationReferences = [];
+        // Build targets from the new getReferenceByEmail shape: [{ email, reference }]
+        let targets = [];
         if (aiReply && aiReply.trim() === '__ALL__') {
-            conversationReferences = await getReferenceByEmail('__ALL__');
-            if (!Array.isArray(conversationReferences) || conversationReferences.length === 0) {
+            targets = await getReferenceByEmail('__ALL__');
+            if (!Array.isArray(targets) || targets.length === 0) {
                 return res.status(400).json({ status: 'error', message: 'Keine gültigen ConversationReferences für alle Mitarbeiter gefunden.' });
             }
         } else {
             if (!emailsArray.length) {
                 return res.status(400).json({ status: 'error', message: 'Konnte keine gültigen Empfänger aus dem Eingabetext ermitteln.' });
             }
-            conversationReferences = await getReferenceByEmail(emailsArray);
-            if (!Array.isArray(conversationReferences) || conversationReferences.length === 0) {
+            targets = await getReferenceByEmail(emailsArray);
+            if (!Array.isArray(targets) || targets.length === 0) {
                 return res.status(400).json({ status: 'error', message: 'Keine gültigen ConversationReferences für die angegebenen Empfänger gefunden.' });
             }
         }
@@ -69,17 +70,16 @@ export async function notifyUserHandler(req, res) {
         const sent = [];
         const failed = [];
 
-        for (const conversationReference of conversationReferences) {
+        for (const { email: targetEmail, reference: conversationReference } of targets) {
             try {
                 if (!conversationReference?.serviceUrl) {
-                    const refEmail = conversationReference?.user?.email || conversationReference?.user?.id || 'unknown';
                     console.warn('⚠️ Überspringe Reference ohne serviceUrl:', {
-                        to: refEmail,
+                        to: targetEmail,
                         hasConversation: Boolean(conversationReference?.conversation),
                         hasUser: Boolean(conversationReference?.user),
                         hasBot: Boolean(conversationReference?.bot),
                     });
-                    failed.push(refEmail);
+                    failed.push(targetEmail);
                     continue;
                 }
                 await adapter.continueConversation(
@@ -94,20 +94,17 @@ export async function notifyUserHandler(req, res) {
 
                         if (replyText && replyText.trim()) {
                             await turnContext.sendActivity({ type: 'message', text: replyText });
-                            const refEmail = conversationReference?.user?.email || conversationReference?.user?.id || 'unknown';
-                            sent.push(refEmail);
+                            sent.push(targetEmail);
                         } else {
                             console.warn("⚠️ Leere/ungültige OpenAI-Antwort:", JSON.stringify(response, null, 2));
-                            const refEmail = conversationReference?.user?.email || conversationReference?.user?.id || 'unknown';
-                            failed.push(refEmail);
+                            failed.push(targetEmail);
                         }
                     }
                 );
             } catch (err) {
-                const refEmail = conversationReference?.user?.email || conversationReference?.user?.id || 'unknown';
                 const errDetails = err?.response?.data || err?.stack || err?.message || String(err);
-                console.error(`❌ Fehler beim Senden an ${refEmail}:`, errDetails);
-                failed.push(refEmail);
+                console.error(`❌ Fehler beim Senden an ${targetEmail}:`, errDetails);
+                failed.push(targetEmail);
             }
         }
 

@@ -44,7 +44,7 @@ export async function getReferenceByEmail(emails) {
     // Case 1: Request ALL references
     if (emails === '*' || emails === '__ALL__' || (emails && typeof emails === 'object' && emails.all === true)) {
       const allMap = await getAllReferences();
-      return Object.values(allMap);
+      return Object.entries(allMap).map(([email, reference]) => ({ email, reference }));
     }
 
     // Case 2: Array of emails → return array of references
@@ -55,10 +55,10 @@ export async function getReferenceByEmail(emails) {
         try {
           const { id } = await getUserInfoByEmail(email);
           const entity = await referenceClient.getEntity(id, id);
-          results.push(JSON.parse(entity.reference));
+          results.push({ email, reference: JSON.parse(entity.reference) });
         } catch (err) {
-          // Skip missing/errored entries, continue
           console.error(`⚠️ Keine ConversationReference für ${email}:`, err.message);
+          results.push({ email, reference: undefined });
         }
       }
       return results;
