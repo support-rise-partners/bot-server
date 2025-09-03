@@ -69,21 +69,19 @@ export async function notifyUserHandler(req, res) {
         const sent = [];
         const failed = [];
 
-        // Falls spezifische Emails angefragt wurden, zeige und markiere diejenigen ohne ConversationReference
-        if (!(aiReply && aiReply.trim() === '__ALL__')) {
-            const foundEmails = conversationReferences
-                .map(r => (r?.user?.email || '').toLowerCase())
-                .filter(Boolean);
-            const inputEmails = emailsArray.map(e => e.toLowerCase());
-            const missingEmails = inputEmails.filter(e => !foundEmails.includes(e));
-            if (missingEmails.length) {
-                console.warn('⚠️ Keine ConversationReference gefunden für folgende Emails:', missingEmails);
-                failed.push(...missingEmails);
-            }
-        }
-
         for (const conversationReference of conversationReferences) {
             try {
+                if (!conversationReference?.serviceUrl) {
+                    const refEmail = conversationReference?.user?.email || conversationReference?.user?.id || 'unknown';
+                    console.warn('⚠️ Überspringe Reference ohne serviceUrl:', {
+                        to: refEmail,
+                        hasConversation: Boolean(conversationReference?.conversation),
+                        hasUser: Boolean(conversationReference?.user),
+                        hasBot: Boolean(conversationReference?.bot),
+                    });
+                    failed.push(refEmail);
+                    continue;
+                }
                 await adapter.continueConversation(
                     conversationReference,
                     async (turnContext) => {
@@ -107,15 +105,20 @@ export async function notifyUserHandler(req, res) {
                 );
             } catch (err) {
                 const refEmail = conversationReference?.user?.email || conversationReference?.user?.id || 'unknown';
-                console.error(`❌ Fehler beim Senden an ${refEmail}:`, err.message);
+                const errDetails = err?.response?.data || err?.stack || err?.message || String(err);
+                console.error(`❌ Fehler beim Senden an ${refEmail}:`, errDetails);
                 failed.push(refEmail);
             }
         }
 
-        console.log("✅ Erfolgreich gesendet an:", sent);
-        console.log("❌ Fehler beim Senden an:", failed);
+        const unique = arr => Array.from(new Set(arr));
+        const sentUnique = unique(sent);
+        const failedFiltered = unique(failed.filter(e => !sentUnique.includes(e)));
 
-        return res.status(200).json({ status: "done", sent, failed });
+        console.log("✅ Erfolgreich gesendet an:", sentUnique);
+        console.log("❌ Fehler beim Senden an:", failedFiltered);
+
+        return res.status(200).json({ status: "done", sent: sentUnique, failed: failedFiltered });
     } catch (error) {
         console.error("❌ Fehler beim Senden:", error.message);
         return res.status(500).json({ status: "error", message: "Interner Fehler beim Senden der Nachricht." });
