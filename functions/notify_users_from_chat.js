@@ -43,10 +43,11 @@ export default async function (sessionId, userName, args) {
 
   const email = await getEmailByUserName(userName);
   if (!isAdmin(email)) {
-    const { reply } = await getChatCompletion({
+   const { reply } = await getChatCompletion({
       sessionId: sessionId,
       role: 'system',
-      text: "Administratorrechte sind erforderlich, um direkte Nachrichten zu senden. Erstelle stattdessen ein Ticket."
+      text: "Administratorrechte sind erforderlich, um direkte Nachrichten zu senden. Erstelle stattdessen ein Ticket.",
+      userName: userName
     });
     return reply;
   }
@@ -64,7 +65,8 @@ export default async function (sessionId, userName, args) {
   const { reply } = await getChatCompletion({
     sessionId: sessionId,
     role: 'system',
-    text: JSON.stringify({ sent: result?.sent, failed: result?.failed })
+    text: JSON.stringify({ sent: result?.sent, failed: result?.failed }),
+    userName: userName
   });
 
   return reply;

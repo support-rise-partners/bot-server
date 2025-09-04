@@ -83,7 +83,7 @@
   },
   {
     "name": "notify_users_from_chat",
-    "description": "Sendet eine Textnachricht über Risy an einen oder mehrere Mitarbeiter.",
+    "description": "Nur wenn Userrole = Admin! Sendet eine Textnachricht an einzelne Mitarbeiter.",
     "parameters": {
         "type": "object",
         "properties": {

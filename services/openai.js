@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import { AzureOpenAI } from 'openai';
 import functionSchema from '../config/function_schema.json' with { type: 'json' };
+import { getEmailByUserName } from '../services/conversationReferenceService.js';
+import { isAdmin } from '../config/roles.js';
 import { getLastMessages, saveMessage } from './storage.js';
 
 const systemPrompt = fs.readFileSync(path.resolve('config/system_prompt.txt'), 'utf8');
@@ -75,7 +77,17 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
             }
         }
 
-        const enrichedSystemPrompt = `${systemPrompt}\n\nZeit jetzt: ${messageTime}\nUsername: ${userName || 'Benutzer'}`;
+        let userRole = 'User';
+        try {
+            const email = await getEmailByUserName(userName);
+            if (email && isAdmin(email)) {
+                userRole = 'Admin';
+            }
+        } catch (e) {
+            console.warn('⚠️ Failed to resolve user role:', e?.message);
+        }
+
+        const enrichedSystemPrompt = `${systemPrompt}\n\nZeit jetzt: ${messageTime}\nUsername: ${userName || 'Benutzer'}\nUserRole: ${userRole}`;
 
         const messages = [
             { role: "system", content: enrichedSystemPrompt },
