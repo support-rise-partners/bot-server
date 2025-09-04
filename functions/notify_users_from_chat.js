@@ -24,7 +24,7 @@ export default async function (sessionId, userName, args) {
       args = {};
     }
   }
-  const prefixedMessage = `Informiere den User: ${args?.message || ''}`;
+  const prefixedMessage = `Formuliere eine info-nachricht (kein function calling!): ${args?.message || ''}`;
   console.log("📨 Eingehende Parameter -> message:", args?.message, "email:", args?.recipients);
 
   const fakeReq = { body: { emails: args?.recipients || '', message: prefixedMessage || '' } };
@@ -67,5 +67,5 @@ export default async function (sessionId, userName, args) {
     text: String(result)
   });
 
-  return { ...result, aiResponse };
+  return aiResponse;
 }
