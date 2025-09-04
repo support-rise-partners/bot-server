@@ -1,4 +1,4 @@
-import { getChatCompletion } from '../services/openaiService.js';
+import { getChatCompletion } from '../services/openai.js';
 import { notifyUserHandler } from './notify_user.js';
 import { getEmailByUserName } from '../services/conversationReferenceService.js';
 import { isAdmin } from '../config/roles.js';
