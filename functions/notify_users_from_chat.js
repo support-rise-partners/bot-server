@@ -14,8 +14,18 @@ import { isAdmin } from '../config/roles.js';
  * @returns {Promise<{ code: number, status: string, sent: string[], failed: string[] }>} Ergebnis des Versands
  */
 export default async function (sessionId, userName, args) {
+  // --- Parse args if it comes as a string (no normalization; no fallbacks) ---
+  console.log("📦 Raw args:", args);
+  if (typeof args === "string") {
+    try {
+      args = JSON.parse(args);
+    } catch (err) {
+      console.error("❌ Failed to parse args JSON:", err?.message);
+      args = {};
+    }
+  }
   const prefixedMessage = `Informiere den User: ${args?.message || ''}`;
-  console.log("📨 Eingehende Parameter -> message:", args?.message, "userName/email:", userName);
+  console.log("📨 Eingehende Parameter -> message:", args?.message, "email:", args?.recipients);
 
   const fakeReq = { body: { emails: args?.recipients || '', message: prefixedMessage || '' } };
   console.log("📤 NotifyUserHandler call with emails:", fakeReq.body.emails, "message:", fakeReq.body.message);
