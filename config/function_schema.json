@@ -93,7 +93,7 @@
             },
             "message": {
                 "type": "string",
-                "description": "Der Inhalt der Nachricht, die an die angegebenen Empfänger gesendet werden soll."
+                "description": "Der Inhalt der Nachricht, die an die angegebenen Empfänger gesendet werden soll. Möglichst in Wortlaut"
             }
         },
         "required": ["recipients", "message"]
