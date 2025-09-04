@@ -61,15 +61,11 @@ export default async function (sessionId, userName, args) {
   await notifyUserHandler(fakeReq, fakeRes);
 
   // Optional system completion step
-  const aiResponse = await getChatCompletion({
+  const { reply } = await getChatCompletion({
     sessionId: sessionId,
     role: 'system',
     text: String(result)
   });
 
-  // Always return a string (avoid sending objects to Teams)
-  if (typeof aiResponse === 'string') {
-    return aiResponse;
-  }
-  return JSON.stringify(aiResponse, null, 2);
+  return reply;
 }
