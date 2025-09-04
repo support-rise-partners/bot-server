@@ -15,6 +15,7 @@ import { isAdmin } from '../config/roles.js';
  */
 export default async function (sessionId, userName, args) {
   const prefixedMessage = `Informiere den User: ${args?.message || ''}`;
+  console.log("📨 Eingehende Parameter -> message:", args?.message, "userName/email:", userName);
 
   const fakeReq = { body: { emails: args?.recipients || '', message: prefixedMessage || '' } };
   console.log("📤 NotifyUserHandler call with emails:", fakeReq.body.emails, "message:", fakeReq.body.message);
