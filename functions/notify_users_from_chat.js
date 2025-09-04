@@ -67,5 +67,9 @@ export default async function (sessionId, userName, args) {
     text: String(result)
   });
 
-  return aiResponse;
+  // Always return a string (avoid sending objects to Teams)
+  if (typeof aiResponse === 'string') {
+    return aiResponse;
+  }
+  return JSON.stringify(aiResponse, null, 2);
 }
