@@ -64,7 +64,7 @@ export default async function (sessionId, userName, args) {
   const { reply } = await getChatCompletion({
     sessionId: sessionId,
     role: 'system',
-    text: JSON.stringify(result)
+    text: JSON.stringify({ sent: result?.sent, failed: result?.failed })
   });
 
   return reply;
