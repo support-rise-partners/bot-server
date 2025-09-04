@@ -28,8 +28,20 @@ function extractEmailsFromAI(rawText) {
 
 export async function notifyUserHandler(req, res) {
     try {
+        // --- Defensive guard start ---
+        if (!req || typeof req !== 'object') req = { body: {} };
+        if (!req.body || typeof req.body !== 'object') req.body = {};
+        if (!res || typeof res !== 'object') res = {};
+        if (typeof res.status !== 'function') {
+            res.statusCode = 200;
+            res.status = function (code) { this.statusCode = code || 200; return this; };
+        }
+        if (typeof res.json !== 'function') {
+            res.json = function (payload) { return payload; };
+        }
         console.log("📥 Eingehender Anfrage-Body:", req.body);
-        let { emails, message } = req.body;
+        // --- Defensive guard end ---
+        let { emails, message } = req.body || {};
 
         // 1) Validate message as non-empty string
         if (typeof message !== 'string' || !message.trim()) {
