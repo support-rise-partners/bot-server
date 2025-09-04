@@ -5,8 +5,7 @@ export const roles = {
   admin: [
     "andrii.panchenko@rise-partners.de",
     "jan.eversmann@rise-partners.de",
-    "support@rise-partners.de",
-    "bjoern.lamprecht@rise-partners.de"
+    "support@rise-partners.de"
   ]
 };
 

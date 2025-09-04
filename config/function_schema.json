@@ -89,7 +89,7 @@
         "properties": {
             "recipients": {
                 "type": "string",
-                "description": "Empfänger der Nachricht. Eine Auflistung der Namen und/oder E-Mail-Adressen oder ein Ausdruck, der ALLE Mitarbeiter bezeichnet."
+                "description": "Empfänger der Nachricht. Eine Auflistung der Vollständigen Namen und/oder E-Mail-Adressen oder ein Ausdruck, der ALLE Mitarbeiter bezeichnet."
             },
             "message": {
                 "type": "string",
