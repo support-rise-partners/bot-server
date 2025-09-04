@@ -82,7 +82,7 @@
     }
   },
   {
-    "name": "notify_user",
+    "name": "notify_users_from_chat",
     "description": "Sendet eine Textnachricht über Risy an einen oder mehrere Mitarbeiter.",
     "parameters": {
         "type": "object",
