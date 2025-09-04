@@ -29,7 +29,7 @@ export default async function (sessionId, userName, args) {
         const { reply } = await getChatCompletion({
             sessionId,
             role: 'system',
-            text: `Ticket wurde erstellt. Informiere den User darüber. nTicket-ID: ${data.ticketId} Link: ${data.ticketLink || 'n/a'}`
+            text: `Ticket wurde erstellt. Informiere den User darüber. nTicket-ID: ${data.ticketId} Link: ${data.ticketLink || 'n/a'}. Innerhalb der nächsten 5 Minuten kann das Ticket bei Bedarf über den Link korrigiert werden.`
         });
 
         return reply;
