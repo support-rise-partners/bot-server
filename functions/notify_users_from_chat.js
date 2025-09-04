@@ -24,7 +24,7 @@ export default async function (sessionId, userName, args) {
       args = {};
     }
   }
-  const prefixedMessage = `Informiere: ${args?.message || ''}`;
+  const prefixedMessage = `System info: ${args?.message || ''}`;
   console.log("📨 Eingehende Parameter -> message:", args?.message, "email:", args?.recipients);
 
   const fakeReq = { body: { emails: args?.recipients || '', message: prefixedMessage || '' } };
@@ -43,12 +43,12 @@ export default async function (sessionId, userName, args) {
 
   const email = await getEmailByUserName(userName);
   if (!isAdmin(email)) {
-    const aiResponse = await getChatCompletion({
+    const { reply } = await getChatCompletion({
       sessionId: sessionId,
       role: 'system',
       text: "Du brauchst administratorrechte, um diese Funktion zu nutzen"
     });
-    return aiResponse;
+    return reply;
   }
 
   if (typeof args.recipients !== 'string' || !args.recipients.trim()) {
