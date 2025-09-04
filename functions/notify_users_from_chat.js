@@ -24,7 +24,7 @@ export default async function (sessionId, userName, args) {
       args = {};
     }
   }
-  const prefixedMessage = `System info: ${args?.message || ''}`;
+  const prefixedMessage = `Eingehende Nachricht an den User: ${args?.message || ''}`;
   console.log("📨 Eingehende Parameter -> message:", args?.message, "email:", args?.recipients);
 
   const fakeReq = { body: { emails: args?.recipients || '', message: prefixedMessage || '' } };
