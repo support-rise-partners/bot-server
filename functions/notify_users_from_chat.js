@@ -46,7 +46,7 @@ export default async function (sessionId, userName, args) {
     const { reply } = await getChatCompletion({
       sessionId: sessionId,
       role: 'system',
-      text: "Du brauchst administratorrechte, um diese Funktion zu nutzen"
+      text: "Administratorrechte sind erforderlich, um direkte Nachrichten zu senden. Erstelle stattdessen ein Ticket."
     });
     return reply;
   }
