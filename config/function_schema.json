@@ -8,7 +8,7 @@
         "ort": { "type": "string", "description": "falls für das Ticket relevant, Ort: Bürozimmer, Homeoffice, Arbeitsplatznummer (Beispiel: 05.b) oder Standort" },
         "titel": { "type": "string", "description": "Eine kurze Beschreibung der Anfrage" },
         "problembeschreibung": { "type": "string", "description": "Detaillierte informelle Problembeschreibung basierend auf den Angaben des Nutzers. Verwende möglichst die Formulierungen des Benutzers. Erwähne den Usernamen nicht erneut, wenn nicht nötig" },
-        "zuständigkeit": { "type": "string", "enum": ["IT", "HR", "Verwaltung"], "description": "Zuständige Abteilung (Standard: IT)" },
+        "zuständigkeit": { "type": "string", "enum": ["IT", "Verwaltung"], "description": "Zuständige Abteilung. IT bei allen technischen Themen (Support, Hardware/Software, Infrastruktur, Sicherheit, IT-Beschaffung, Arbeitsplätze und Sitzordnung); Verwaltung bei Themen bzgl. Empfang, Post, Mandantenmanagement, Rechnungen, allgemeine Services" },
         "dringlichkeit": { "type": "integer", "minimum": 1, "maximum": 5, "description": "Dringlichkeit von 1 bis 5. Die Bewertung erfolgt durch dich, nicht den Benutzer. 1 – informativ oder Verbesserung, keine Auswirkung. 2 – geringe Einschränkung, nicht dringend. Lösung im Laufe der nächsten Tage. 3 – mittlere Einschränkung, Lösung im Laufe des Tages. 4 – starke Einschränkung, Lösung in wenigen Stunden. 5 – Notfall, Arbeit unmöglich (z. B. Serverausfall, Verlust)" },
         "bilder": { "type": "array", "items": { "type": "string", "format": "uri"}, "description": "Links zu Ticketsbezogenen Bildern, falls vorhanden" } 
       },
