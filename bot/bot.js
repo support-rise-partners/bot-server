@@ -24,9 +24,9 @@ class MyBot extends ActivityHandler {
                 if (fileNotices.length > 0) {
                     userText += ' \n ' + fileNotices.join(', ');
                 }
+                await context.sendActivity({ type: 'typing' });
                 await saveOrUpdateReference(context);
 
-                await context.sendActivity({ type: 'typing' });
 
                 const [response] = await Promise.all([
                     getChatCompletion({
