@@ -79,13 +79,13 @@ async function getStrictSemanticAnswerString(message, sessionId) {
           .filter((text) => text.trim().length > 0)
           .join('\n\n');
 
-        resultStr = `${answersHighlights}\n\n${firstTwoContentText}`.trim();
+        resultStr = `Kontext: ${answersHighlights}\n\n${firstTwoContentText}`.trim();
       }
     }
 
     if (sessionId && resultStr.trim().length > 0) {
       try {
-        await saveMessage(sessionId, 'context', resultStr);
+        await saveMessage(sessionId, 'system', resultStr);
       } catch (e) {
         console.warn('[cognitiveSearch] saveMessage failed:', e?.message || e);
       }
