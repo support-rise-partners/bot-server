@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import { ActivityHandler, MessageFactory } from 'botbuilder';
 import { getChatCompletion } from '../services/openai.js';
+import { getStrictSemanticAnswerString } from '../services/cognitiveSearch.js';
 const systemPrompt = fs.readFileSync(path.resolve(__dirname, '../config/system_prompt.txt'), 'utf8');
 
 class MyBot extends ActivityHandler {
@@ -26,6 +27,7 @@ class MyBot extends ActivityHandler {
                 }
                 await context.sendActivity({ type: 'typing' });
                 await saveOrUpdateReference(context);
+                await getStrictSemanticAnswerString(userText, sessionId);
 
 
                 const [response] = await Promise.all([
