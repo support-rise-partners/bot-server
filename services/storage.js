@@ -45,9 +45,9 @@ async function saveMessage(sessionId, role, message) {
     }
 }
 
-const MESSAGE_HISTORY_WINDOW_MINUTES = 15;
+const MESSAGE_HISTORY_WINDOW_MINUTES = 20;
 
-async function getLastMessages(sessionId, limit = 20) {
+async function getLastMessages(sessionId, limit = 40) {
     try {
         const sinceTimestamp = Date.now() - MESSAGE_HISTORY_WINDOW_MINUTES * 60 * 1000;
         const entities = client.listEntities({
