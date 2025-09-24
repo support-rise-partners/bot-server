@@ -83,12 +83,12 @@ async function getStrictSemanticAnswerString(message, sessionId) {
       }
     }
 
-    try {
-      if (sessionId) {
+    if (sessionId && resultStr.trim().length > 0) {
+      try {
         await saveMessage(sessionId, 'context', resultStr);
+      } catch (e) {
+        console.warn('[cognitiveSearch] saveMessage failed:', e?.message || e);
       }
-    } catch (e) {
-      console.warn('[cognitiveSearch] saveMessage failed:', e?.message || e);
     }
 
     return resultStr;
