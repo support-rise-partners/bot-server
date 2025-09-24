@@ -1,7 +1,7 @@
 // services/cognitiveSearch.js
 import 'dotenv/config';
 import { SearchClient, AzureKeyCredential } from '@azure/search-documents';
-import { saveMessage } from '../storage.js';
+import { saveMessage } from './storage.js';
 
 const endpoint = process.env.AZURE_SEARCH_ENDPOINT; // e.g. https://risysuchebasis.search.windows.net
 const apiKey = process.env.AZURE_SEARCH_API_KEY;
