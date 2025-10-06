@@ -19,26 +19,11 @@ function cleanUpOldFiles() {
     }
 }
 
-function saveToTmp(buffer, extension = 'bin') {
-    const safeExt = (extension || 'bin').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'bin';
-    const fileName = `${uuidv4()}.${safeExt}`;
+function saveImageToTmp(buffer, extension = 'png') {
+    const fileName = `${uuidv4()}.${extension}`;
     const filePath = path.join(TEMP_DIR, fileName);
     fs.writeFileSync(filePath, buffer);
     return `${SERVER_HOST}/tmp/${fileName}`;
-}
-
-function extFromContentType(ct = '') {
-    const type = ct.toLowerCase();
-    if (type.startsWith('image/')) return type.split('/')[1] || 'png';
-    if (type === 'application/pdf') return 'pdf';
-    if (type === 'application/msword') return 'doc';
-    if (type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
-    return '';
-}
-
-function extFromName(name = '') {
-    const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
-    return m ? m[1] : '';
 }
 
 async function fetchWithBotToken(url) {
@@ -62,64 +47,45 @@ async function fetchDirect(url) {
 export async function extractImagesFromContext(context) {
     const fileNotices = [];
     const attachments = context.activity?.attachments || [];
-    if (!attachments.length) return { imageUrls: [], docUrls: [], fileNotices: [] };
+    if (!attachments.length) return { imageUrls: [], fileNotices: [] };
 
     cleanUpOldFiles();
 
     const imageUrls = [];
-    const docUrls = [];
 
     for (const attachment of attachments) {
-        const ct = (attachment.contentType || '').toLowerCase();
-        const name = attachment.name || '';
-        let buffer = null;
-        let extension = '';
+        let fileBuffer;
+        let extension = 'png';
 
-        const isImage = ct.startsWith('image/');
-        const isPdf = ct === 'application/pdf' || /\.pdf$/i.test(name || '');
-        const isDoc = ct === 'application/msword' || /\.doc$/i.test(name || '');
-        const isDocx = ct === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || /\.docx$/i.test(name || '');
-        const needsAuthFetch = !!attachment.contentUrl; 
-        const hasPublicDownload = !!attachment.content?.downloadUrl;
+        if ((attachment.contentType || '').toLowerCase().startsWith('image/')) {
+            const ct = (attachment.contentType || '').toLowerCase();
+            const tryDownloadUrl = attachment.content?.downloadUrl;
 
-        try {
-            if (isImage) {
-                buffer = needsAuthFetch
-                    ? await fetchWithBotToken(attachment.contentUrl)
-                    : hasPublicDownload
-                        ? await fetchDirect(attachment.content.downloadUrl)
-                        : null;
-                extension = extFromContentType(ct) || extFromName(name) || 'png';
-                if (!buffer) continue;
-                imageUrls.push(saveToTmp(buffer, extension));
+            if (tryDownloadUrl) {
+                fileBuffer = await fetchDirect(tryDownloadUrl);
+                extension = (ct.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+            } else if (attachment.contentUrl) {
+                fileBuffer = await fetchWithBotToken(attachment.contentUrl);
+                extension = (ct.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
+            } else {
                 continue;
             }
-
-            if (isPdf || isDoc || isDocx) {
-                buffer = needsAuthFetch
-                    ? await fetchWithBotToken(attachment.contentUrl)
-                    : hasPublicDownload
-                        ? await fetchDirect(attachment.content.downloadUrl)
-                        : null;
-                extension = extFromContentType(ct) || extFromName(name) || (isPdf ? 'pdf' : isDocx ? 'docx' : 'doc');
-                if (!buffer) {
-                    fileNotices.push(`Anhang konnte nicht geladen werden: ${name || '(unbenannt)'}`);
-                    continue;
-                }
-                docUrls.push(saveToTmp(buffer, extension));
-                fileNotices.push(`gespeicherte Datei: ${name || '(unbenannt)'} (Format .${extension})`);
-                continue;
-            }
-
-            if (name && !isImage) {
-                const ext = path.extname(name);
-                fileNotices.push(`angehängte Datei: ${name} (Format ${ext})`);
-                continue;
-            }
-        } catch (e) {
-            fileNotices.push(`Fehler beim Verarbeiten von ${name || '(unbenannt)'}: ${e?.message || e}`);
+        } else if (attachment.content?.downloadUrl && attachment.name?.match(/\.(png|jpe?g|gif|bmp|webp)$/i)) {
+            fileBuffer = await fetchDirect(attachment.content.downloadUrl);
+            const rawExt = path.extname(attachment.name).slice(1).toLowerCase();
+            const allowedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'];
+            extension = allowedExts.includes(rawExt) ? rawExt : 'png';
+        } else if (attachment.name && !(attachment.contentType || '').toLowerCase().startsWith('image/')) {
+            const ext = path.extname(attachment.name);
+            fileNotices.push(`angehängte Datei: ${attachment.name} (Format ${ext})`);
+            continue;
+        } else {
+            continue;
         }
+
+        const publicUrl = saveImageToTmp(fileBuffer, extension);
+        imageUrls.push(publicUrl);
     }
 
-    return { imageUrls, docUrls, fileNotices };
+    return { imageUrls, fileNotices };
 }
