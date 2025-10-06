@@ -9,12 +9,11 @@ import 'dotenv/config';
 import { BotFrameworkAdapter } from 'botbuilder';
 import { MyBot } from './bot/bot.js';
 import notifyUser from './functions/notify_user.js';
-import { buildSyncRouter, startExternalWeeklyScheduler } from './services/blobExportService/sitesExport.js';
+import { startExternalWeeklyScheduler } from './services/blobExportService/sitesExport.js';
 
 const app = express().use(express.json());
 app.use(express.static(__dirname + '/public'));
 app.use('/tmp', express.static(__dirname + '/tmp_attachments'));
-app.use('/sync', buildSyncRouter());
 
 const myBot = new MyBot();
 
