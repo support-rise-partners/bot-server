@@ -73,13 +73,17 @@ async function getStrictSemanticAnswerString(message, sessionId) {
           .filter((h) => typeof h === 'string' && h.trim().length > 0)
           .join('\n');
 
-        const firstTwo = Array.isArray(json.value) ? json.value.slice(0, 2) : [];
-        const firstTwoContentText = firstTwo
-          .map((item) => (typeof item.content_text === 'string' ? item.content_text : ''))
+        const firstFour = Array.isArray(json.value) ? json.value.slice(0, 4) : [];
+        const firstFourContentText = firstFour
+          .map((item) => {
+            const title = typeof item.document_title === 'string' ? item.document_title : '';
+            const content = typeof item.content_text === 'string' ? item.content_text : '';
+            return `${title}\n${content}`.trim();
+          })
           .filter((text) => text.trim().length > 0)
           .join('\n\n');
 
-        resultStr = `Kontext: ${answersHighlights}\n\n${firstTwoContentText}`.trim();
+        resultStr = `Kontext: ${answersHighlights}\n\n${firstFourContentText}`.trim();
       }
     }
 
