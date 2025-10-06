@@ -1,0 +1,13 @@
+2025/10/05-18:50:38.913 b43e3 Reusing MANIFEST /Users/andriipancenko/Andrii/разное/RISE PARTNERS/Helpdesk Bot/bot-server/services/blobExportService/puppeteer-profile/Default/IndexedDB/https_risepartners1.sharepoint.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/10/05-18:50:38.913 b43e3 Recovering log #130
+2025/10/05-18:50:38.913 b43e3 Reusing old log /Users/andriipancenko/Andrii/разное/RISE PARTNERS/Helpdesk Bot/bot-server/services/blobExportService/puppeteer-profile/Default/IndexedDB/https_risepartners1.sharepoint.com_0.indexeddb.leveldb/000130.log 
+2025/10/05-18:50:44.420 b43ed Level-0 table #135: started
+2025/10/05-18:50:44.423 b43ed Level-0 table #135: 56476 bytes OK
+2025/10/05-18:50:44.426 b43ed Delete type=0 #130
+2025/10/05-18:50:44.426 b43ed Manual compaction at level-0 from '\x005\x00\x00\x00' @ 72057594037927935 : 1 .. '\x006\x00\x00\x00' @ 0 : 0; will stop at '\x005\x00\x00\x05' @ 45377 : 1
+2025/10/05-18:50:44.427 b43ed Compacting 1@0 + 1@1 files
+2025/10/05-18:50:44.443 b43ed Generated table #136@0: 14771 keys, 1643103 bytes
+2025/10/05-18:50:44.443 b43ed Compacted 1@0 + 1@1 files => 1643103 bytes
+2025/10/05-18:50:44.446 b43ed compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/10/05-18:50:44.446 b43ed Delete type=2 #135
+2025/10/05-18:50:44.446 b43ec Manual compaction at level-0 from '\x005\x00\x00\x05' @ 45377 : 1 .. '\x006\x00\x00\x00' @ 0 : 0; will stop at (end)
