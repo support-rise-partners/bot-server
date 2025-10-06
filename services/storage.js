@@ -8,6 +8,7 @@ import dotenv from 'dotenv';
 dotenv.config();
 import fetch from 'node-fetch';
 import { TableClient } from "@azure/data-tables";
+import cron from 'node-cron';
 
 const client = TableClient.fromConnectionString(
     process.env.AZURE_STORAGE_CONNECTION_STRING,
@@ -45,7 +46,63 @@ async function saveMessage(sessionId, role, message) {
     }
 }
 
+
 const MESSAGE_HISTORY_WINDOW_MINUTES = 20;
+
+// Aufbewahrungsdauer der Chat-Historie (in Minuten); Standard: 24 Stunden
+const CHAT_HISTORY_RETENTION_MINUTES = parseInt(
+    process.env.CHAT_HISTORY_RETENTION_MINUTES || String(24 * 60),
+    10
+);
+
+/**
+ * Löscht alte Nachrichten aus der Tabelle "ChatHistory".
+ * Es werden alle Einträge mit RowKey (Millisekunden-Timestamp) kleiner als dem Stichtag gelöscht.
+ */
+async function purgeOldMessages() {
+    const cutoff = Date.now() - CHAT_HISTORY_RETENTION_MINUTES * 60 * 1000;
+    const cutoffStr = String(cutoff);
+    let removed = 0;
+
+    try {
+        const entities = client.listEntities({
+            queryOptions: {
+                // globaler Filter über alle Partitionen: alles löschen, was älter ist
+                filter: `RowKey lt '${cutoffStr}'`
+            }
+        });
+
+        for await (const entity of entities) {
+            try {
+                await client.deleteEntity(entity.partitionKey, entity.rowKey);
+                removed++;
+            } catch (err) {
+                console.error("Fehler beim Löschen eines Eintrags:", err.message);
+            }
+        }
+
+        console.log(`Bereinigung abgeschlossen: ${removed} alte Nachricht(en) entfernt (Stichtag: ${new Date(cutoff).toISOString()}).`);
+    } catch (error) {
+        console.error("Fehler bei der Bereinigung der Chat-Historie:", error.message);
+    }
+}
+
+/**
+ * Plant eine nächtliche Bereinigung um 03:30 Europe/Berlin.
+ * Zeitplan kann über ENV TZ (Standard: Europe/Berlin) beeinflusst werden.
+ */
+function startNightlyCleanup() {
+    const tz = process.env.TZ || 'Europe/Berlin';
+    // Sekunden Minute Stunde Tag Monat Wochentag
+    cron.schedule('0 30 3 * * *', async () => {
+        console.log("Starte nächtliche Bereinigung der Chat-Historie …");
+        await purgeOldMessages();
+    }, { timezone: tz });
+    console.log(`⏰ Nächtliche Bereinigung der Chat-Historie geplant: täglich 03:30 (${tz}). Aufbewahrung: ${CHAT_HISTORY_RETENTION_MINUTES} Minuten.`);
+}
+
+// Scheduler direkt aktivieren, sobald dieses Modul geladen wird
+startNightlyCleanup();
 
 async function getLastMessages(sessionId, limit = 40) {
     try {
@@ -73,4 +130,4 @@ async function getLastMessages(sessionId, limit = 40) {
     }
 }
 
-export { saveMessage, getLastMessages };
+export { saveMessage, getLastMessages, purgeOldMessages, startNightlyCleanup };

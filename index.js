@@ -10,6 +10,7 @@ import { BotFrameworkAdapter } from 'botbuilder';
 import { MyBot } from './bot/bot.js';
 import notifyUser from './functions/notify_user.js';
 import { startExternalWeeklyScheduler } from './services/blobExportService/sitesExport.js';
+import { startNightlyCleanup } from './services/storage.js';
 
 const app = express().use(express.json());
 app.use(express.static(__dirname + '/public'));
@@ -29,4 +30,5 @@ app.post('/api/notify_user', async (req, res) => {
 
 const port = process.env.PORT || 3978;
 startExternalWeeklyScheduler();
+startNightlyCleanup();
 app.listen(port, () => console.log(`Bot is running on port ${port}`));
