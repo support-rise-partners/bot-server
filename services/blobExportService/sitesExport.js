@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /*
   exporter.mjs (ESM)
-  Ежемесячная выгрузка контента SharePoint Online в Azure Blob:
+  Ежемесячная/еженедельная выгрузка контента SharePoint Online в Azure Blob:
   - Документы (docx/xlsx/pptx/pdf) — только новые/изменённые
-  - Страницы .aspx => PDF (через headless браузер) — только новые/изменённые
+  - Страницы .aspx => HTML (через headless браузер) — только новые/изменённые
   - Внешние публичные ссылки (из Azure Table Storage 'ExternalSitesUrl') — сохраняем как HTML с детекцией изменений
-  - Ручной вход через noVNC (Xvfb+x11vnc+websockify) с сохранением профиля Puppeteer
+  ⤷ Ручной вход выполняется через `node services/.../sitesExport.js --login` (без noVNC маршрутов)
 */
 
 import dotenv from 'dotenv';
@@ -22,9 +22,7 @@ import { BlobServiceClient } from '@azure/storage-blob';
 import { TableClient } from '@azure/data-tables';
 import { fileURLToPath } from 'url';
 import { createHash } from 'crypto';
-import express from 'express';
-
-import { spawn } from 'child_process';
+// (no unused imports)
 
 
 /* =========================
@@ -40,21 +38,6 @@ const {
   CONTAINER_NAME        // например: sharepoint-archive
 } = process.env;
 
-const SYNC_TRIGGER_TOKEN = process.env.SYNC_TRIGGER_TOKEN || '';
-
-// === noVNC / Xvfb login session config (Linux) ===
-const NOVNC_PORT = Number(process.env.NOVNC_PORT || 6080);           // where websockify/noVNC will listen
-const NOVNC_WEB = process.env.NOVNC_WEB || '/usr/share/novnc';       // path to noVNC static files
-const DISPLAY_NUM = process.env.DISPLAY_NUM || ':99';                // Xvfb display number
-const SCREEN_SIZE = process.env.SCREEN_SIZE || '1440x900x24';        // Xvfb screen
-const CHROME_BIN = process.env.CHROME_BIN || 'chromium-browser';     // or 'google-chrome'
-const X11VNC_BIN = process.env.X11VNC_BIN || 'x11vnc';
-const XVFB_BIN = process.env.XVFB_BIN || 'Xvfb';
-const WEBSOCKIFY_BIN = process.env.WEBSOCKIFY_BIN || 'websockify';
-
-function bin(name, fallback) {
-  return name && name.trim() ? name.trim() : fallback;
-}
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -313,77 +296,6 @@ async function safeUnlink(filePath) {
   } catch {}
 }
 
-// =========================
-// VNC / noVNC controlled login session (Linux)
-// =========================
-const VNC_STATE_FILE = path.join(TMP_DIR, 'novnc-session.json');
-
-async function readVncState() {
-  try { const t = await fs.readFile(VNC_STATE_FILE, 'utf8'); return JSON.parse(t); } catch { return null; }
-}
-async function writeVncState(state) {
-  await fs.mkdir(path.dirname(VNC_STATE_FILE), { recursive: true });
-  await fs.writeFile(VNC_STATE_FILE, JSON.stringify(state, null, 2), 'utf8');
-}
-async function clearVncState() {
-  try { await fs.unlink(VNC_STATE_FILE); } catch {}
-}
-
-function spawnProc(cmd, args, opts) {
-  const p = spawn(cmd, args, { stdio: 'pipe', ...opts });
-  p.stdout?.on('data', d => console.log(`[${cmd}]`, String(d).trim()));
-  p.stderr?.on('data', d => console.warn(`[${cmd} ERR]`, String(d).trim()));
-  p.on('exit', (code, sig) => console.log(`[${cmd}] exited`, code, sig || ''));
-  return p;
-}
-
-async function startNoVncLoginSession() {
-  const existing = await readVncState();
-  if (existing && existing.running) {
-    return { url: `/sync/novnc/vnc.html?autoconnect=1&resize=scale`, info: 'Existing session is running' };
-  }
-
-  // 1) Xvfb
-  const xvfb = spawnProc(bin(XVFB_BIN, 'Xvfb'), [DISPLAY_NUM, '-screen', '0', SCREEN_SIZE, '-ac']);
-  // give it a moment to boot
-  await sleep(600);
-
-  // 2) lightweight WM (optional). If fluxbox is installed, start it; otherwise skip silently
-  let wm = null;
-  try { wm = spawnProc('fluxbox', [], { env: { ...process.env, DISPLAY: DISPLAY_NUM } }); } catch {}
-
-  // 3) x11vnc to expose the display as VNC on :5901
-  const vnc = spawnProc(bin(X11VNC_BIN, 'x11vnc'), ['-display', DISPLAY_NUM, '-rfbport', '5901', '-nopw', '-forever', '-shared'], { env: { ...process.env, DISPLAY: DISPLAY_NUM } });
-  await sleep(500);
-
-  // 4) websockify to translate VNC to WebSocket on NOVNC_PORT and serve noVNC static
-  const ws = spawnProc(bin(WEBSOCKIFY_BIN, 'websockify'), ['--web', NOVNC_WEB, String(NOVNC_PORT), '127.0.0.1:5901']);
-
-  // 5) Launch Chromium on the Xvfb display with our persistent profile and go to SP home
-  const chromeEnv = { ...process.env, DISPLAY: DISPLAY_NUM };
-  const chromeArgs = [
-    `--user-data-dir=${PROFILE_DIR}`,
-    '--no-first-run', '--no-default-browser-check', '--disable-gpu', '--force-device-scale-factor=1',
-    '--disable-features=Translate,ChromeWhatsNewUI',
-    `https://${SITE_HOST}`
-  ];
-  const chrome = spawnProc(CHROME_BIN, chromeArgs, { env: chromeEnv });
-
-  const state = { running: true, pids: { xvfb: xvfb.pid, wm: wm?.pid || 0, vnc: vnc.pid, ws: ws.pid, chrome: chrome.pid }, display: DISPLAY_NUM, port: NOVNC_PORT };
-  await writeVncState(state);
-  return { url: `/sync/novnc/vnc.html?autoconnect=1&resize=scale`, info: 'New session started' };
-}
-
-async function stopNoVncLoginSession() {
-  const state = await readVncState();
-  if (!state || !state.running) return false;
-  const pids = Object.values(state.pids || {}).filter(Boolean);
-  for (const pid of pids) {
-    try { process.kill(pid, 'SIGTERM'); } catch {}
-  }
-  await clearVncState();
-  return true;
-}
 async function downloadFileToTemp(driveId, itemId, name) {
   const token = await getGraphToken();
   const url = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/content`;
@@ -987,6 +899,12 @@ async function loginOnceAndSaveCookies() {
   const homeUrl = `https://${SITE_HOST}`;
   await page.goto(homeUrl, { waitUntil: 'networkidle2' });
   console.log('Ожидаю входа... После успешного входа просто закройте окно браузера.');
+
+  // Дождаться закрытия окна браузера пользователем — затем вернуть управление
+  await new Promise((resolve) => {
+    const done = () => resolve();
+    browser.once('disconnected', done);
+  });
 }
 
 /* =========================
@@ -1008,108 +926,20 @@ function scheduleWeeklyExternal() {
   console.log('⏰ Еженедельная синхронизация внешних ссылок запланирована: ПН 04:00 (Europe/Berlin).');
 }
 
-// =========================
-// Router for manual SharePoint sync (mount into existing Express app)
-// =========================
-function buildSyncRouter() {
-  const router = express.Router();
-
-  // Serve noVNC static (system path)
-  router.use('/novnc', express.static(NOVNC_WEB));
-
-  // noVNC login session routes
-  router.get('/login', async (req, res) => {
-    const token = req.query.token || '';
-    if (SYNC_TRIGGER_TOKEN && token !== SYNC_TRIGGER_TOKEN) return res.status(401).send('Unauthorized');
-    try {
-      const { url, info } = await startNoVncLoginSession();
-      // Redirect user to the noVNC client page hosted under /sync/novnc
-      res.redirect(url);
-    } catch (e) {
-      res.status(500).send('Failed to start noVNC session: ' + (e?.message || e));
-    }
-  });
-
-  router.post('/login/stop', async (req, res) => {
-    const token = req.query.token || req.body?.token || '';
-    if (SYNC_TRIGGER_TOKEN && token !== SYNC_TRIGGER_TOKEN) return res.status(401).send('Unauthorized');
-    try {
-      const ok = await stopNoVncLoginSession();
-      res.status(200).send(ok ? 'noVNC session stopped' : 'noVNC session not running');
-    } catch (e) {
-      res.status(500).send('Failed to stop noVNC session: ' + (e?.message || e));
-    }
-  });
-
-  // Enhanced HTML with noVNC login link and stop button
-  router.get('/', (req, res) => {
-    res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.end(`<!doctype html><html><head><meta charset="utf-8"/><title>Manual SharePoint Sync</title></head>
-<body>
-  <h1>Manual SharePoint Sync</h1>
-  <p>1) Нажмите «Открыть окно входа (noVNC)», выполните вход в окне Chromium (на сервере). Куки сохранятся.
-     2) Затем запустите синхронизацию SharePoint.</p>
-  <p><a href="./login?token=${SYNC_TRIGGER_TOKEN}">Открыть окно входа (noVNC)</a></p>
-  <form method="post" action="./sharepoint?token=${SYNC_TRIGGER_TOKEN}" style="margin-top:1rem">
-    <button type="submit">Запустить синхронизацию SharePoint</button>
-  </form>
-  <form method="post" action="./external-now?token=${SYNC_TRIGGER_TOKEN}" style="margin-top:1rem">
-    <button type="submit">Запустить выгрузку внешних ссылок</button>
-  </form>
-  <form method="post" action="./login/stop?token=${SYNC_TRIGGER_TOKEN}" style="margin-top:1rem">
-    <button type="submit">Остановить noVNC-сессию</button>
-  </form>
-</body></html>`);
-  });
-
-  function checkToken(req, res) {
-    const token = req.query.token || req.body?.token || '';
-    if (SYNC_TRIGGER_TOKEN && token !== SYNC_TRIGGER_TOKEN) {
-      res.status(401).send('Unauthorized');
-      return false;
-    }
-    return true;
-  }
-
-  router.post('/sharepoint', async (req, res) => {
-    if (!checkToken(req, res)) return;
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    try {
-      // Интерактивный логин (окно Chromium)
-      await loginOnceAndSaveCookies();
-      await ensureContainer();
-      await fs.mkdir(TMP_DIR, { recursive: true });
-      await runSharePointOnly();
-      res.end('SharePoint sync finished successfully.');
-    } catch (e) {
-      console.error('Manual SharePoint sync failed:', e);
-      res.status(500).end('Sync failed: ' + (e?.message || e));
-    }
-  });
-
-  router.post('/external-now', async (req, res) => {
-    if (!checkToken(req, res)) return;
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    try {
-      await ensureContainer();
-      await fs.mkdir(TMP_DIR, { recursive: true });
-      await runExternalOnly();
-      res.end('External sync finished successfully.');
-    } catch (e) {
-      console.error('Manual External sync failed:', e);
-      res.status(500).end('Sync failed: ' + (e?.message || e));
-    }
-  });
-
-  return router;
-}
 
 // =========================
 // Entry point (CLI-only modes). When imported, nothing auto-starts.
 // =========================
 (async () => {
   if (process.argv.includes('--login')) {
+    // 1) Открываем браузер для интерактивного входа и ждём закрытия окна
     await loginOnceAndSaveCookies();
+
+    // 2) После закрытия — сразу запускаем выгрузку SharePoint
+    console.log('\n[LOGIN] Сессия сохранена. Запускаю выгрузку SharePoint...');
+    await ensureContainer();
+    await fs.mkdir(TMP_DIR, { recursive: true });
+    await runSharePointOnly();
     return;
   }
 
@@ -1133,4 +963,4 @@ function buildSyncRouter() {
   }
 })();
 
-export { buildSyncRouter, scheduleWeeklyExternal as startExternalWeeklyScheduler, runSharePointOnly, runExternalOnly, runFullExport };
+export { scheduleWeeklyExternal as startExternalWeeklyScheduler, runSharePointOnly, runExternalOnly, runFullExport, loginOnceAndSaveCookies };
