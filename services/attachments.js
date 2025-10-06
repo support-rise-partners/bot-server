@@ -87,10 +87,9 @@ export async function extractImagesFromContext(context) {
 
             if (fileBuffer) {
                 const publicUrl = saveImageToTmp(fileBuffer, ext);
-                imageUrls.push(publicUrl);
-                fileNotices.push(`angehängte Datei: ${attachment.name} (Format .${ext})`);
+                fileNotices.push(`angehängte Datei: ${attachment.name || '(unbenannt)'} (Format .${ext}) Link: ${publicUrl}`);
             } else {
-                fileNotices.push(`angehängte Datei konnte nicht geladen werden: ${attachment.name}`);
+                fileNotices.push(`angehängte Datei konnte nicht geladen werden: ${attachment.name || '(unbenannt)'}`);
             }
             continue;
         } else {
