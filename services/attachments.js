@@ -76,8 +76,22 @@ export async function extractImagesFromContext(context) {
             const allowedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'];
             extension = allowedExts.includes(rawExt) ? rawExt : 'png';
         } else if (attachment.name && !(attachment.contentType || '').toLowerCase().startsWith('image/')) {
-            const ext = path.extname(attachment.name);
-            fileNotices.push(`angehängte Datei: ${attachment.name} (Format ${ext})`);
+            const ext = path.extname(attachment.name).replace('.', '') || 'bin';
+            let fileBuffer = null;
+
+            if (attachment.content?.downloadUrl) {
+                fileBuffer = await fetchDirect(attachment.content.downloadUrl);
+            } else if (attachment.contentUrl) {
+                fileBuffer = await fetchWithBotToken(attachment.contentUrl);
+            }
+
+            if (fileBuffer) {
+                const publicUrl = saveImageToTmp(fileBuffer, ext);
+                imageUrls.push(publicUrl);
+                fileNotices.push(`angehängte Datei: ${attachment.name} (Format .${ext})`);
+            } else {
+                fileNotices.push(`angehängte Datei konnte nicht geladen werden: ${attachment.name}`);
+            }
             continue;
         } else {
             continue;
