@@ -4,6 +4,7 @@
   Ежемесячная/еженедельная выгрузка контента SharePoint Online в Azure Blob:
   - Документы (docx/xlsx/pptx/pdf) — только новые/изменённые
   - Страницы .aspx => HTML (через headless браузер) — только новые/изменённые
+  - Пути SharePoint сайтов берутся из Azure Table Storage 'ExternalSitesUrl' с PartitionKey = 'sharepoint' (поле: path / sitePath / url / href)
   - Внешние публичные ссылки (из Azure Table Storage 'ExternalSitesUrl') — сохраняем как HTML с детекцией изменений
   ⤷ Ручной вход выполняется через `node services/.../sitesExport.js --login` (без noVNC маршрутов)
 */
@@ -33,7 +34,6 @@ const {
   CLIENT_ID,
   CLIENT_SECRET,
   SITE_HOST,            // contoso.sharepoint.com
-  SITE_PATHS,           // список путей сайтов через запятую, например: "/,/sites/OrganisationshandbuchRISE"
   AZURE_STORAGE_CONNECTION_STRING,
   CONTAINER_NAME        // например: sharepoint-archive
 } = process.env;
@@ -45,7 +45,7 @@ const __dirname = path.dirname(__filename);
 // Profile directory lives next to this file
 const PROFILE_DIR = path.join(__dirname, 'puppeteer-profile');
 
-if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET || !SITE_HOST || !SITE_PATHS ||
+if (!TENANT_ID || !CLIENT_ID || !CLIENT_SECRET || !SITE_HOST ||
     !AZURE_STORAGE_CONNECTION_STRING || !CONTAINER_NAME) {
   console.error('❌ Проверьте .env — отсутствуют обязательные переменные.');
   process.exit(1);
@@ -132,6 +132,44 @@ async function fetchExternalUrlsFromTable() {
   }
 }
 
+// ======= Чтение путей SharePoint сайтов из Azure Table Storage (PartitionKey='sharepoint') =======
+async function fetchSharePointPathsFromTable() {
+  const tableName = 'ExternalSitesUrl';
+  try {
+    const tableClient = TableClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING, tableName);
+    try { await tableClient.createTable(); } catch {}
+    const paths = new Set();
+    for await (const entity of tableClient.listEntities({ queryOptions: { filter: `PartitionKey eq 'sharepoint'` } })) {
+      // поддерживаем разные варианты имени поля
+      const raw =
+        entity.path ?? entity.Path ?? entity.sitePath ?? entity.SitePath ??
+        entity.url ?? entity.Url ?? entity.URL ?? entity.href ?? entity.Href ?? '';
+      if (typeof raw === 'string' && raw.trim()) {
+        let p = raw.trim();
+        // если указали абсолютный URL, вытащим только path
+        try {
+          if (p.startsWith('http://') || p.startsWith('https://')) {
+            const u = new URL(p);
+            if (u.hostname.toLowerCase() !== SITE_HOST.toLowerCase()) {
+              // пропускаем чужие хосты
+              continue;
+            }
+            p = u.pathname || '/';
+          }
+        } catch {}
+        if (!p.startsWith('/')) p = '/' + p;
+        // нормализуем двойные слэши
+        p = p.replace(/\/{2,}/g, '/');
+        paths.add(p);
+      }
+    }
+    return Array.from(paths);
+  } catch (e) {
+    console.error('Не удалось прочитать пути SharePoint из таблицы ExternalSitesUrl:', e?.message || e);
+    return [];
+  }
+}
+
 
 // ======= Вспомогательные функции для внешних ссылок =======
 async function computeFileHash(filePath) {
@@ -203,12 +241,7 @@ async function processExternalUrl(rawUrl) {
 /* =========================
    Получение siteId, страниц, файлов
    ========================= */
-async function getSiteId() {
-  const token = await getGraphToken();
-  const url = `https://graph.microsoft.com/v1.0/sites/${SITE_HOST}:${SITE_PATH}`;
-  const res = await axios.get(url, { headers: { Authorization: `Bearer ${token}` }});
-  return res.data.id; // siteId
-}
+
 
 
 // Получение siteId по явному пути из SITE_PATHS
@@ -805,14 +838,11 @@ async function processSitePage(sitePage) {
 // Split runners for SharePoint and External
 // =========================
 async function runSharePointOnly() {
-  // Преобразуем SITE_PATHS в массив путей
-  const sitePaths = (SITE_PATHS || '')
-    .split(',')
-    .map(s => s.trim())
-    .filter(Boolean);
+  // Читаем пути сайтов из Azure Table Storage (PartitionKey = 'sharepoint')
+  const sitePaths = await fetchSharePointPathsFromTable();
 
   if (!sitePaths.length) {
-    console.error('SITE_PATHS пуст. Укажите пути сайтов через запятую, например: "/", "/sites/OrganisationshandbuchRISE"');
+    console.error('В таблице ExternalSitesUrl нет путей SharePoint (PartitionKey = "sharepoint"). Добавьте записи с полем path/sitePath/url/href.');
     return;
   }
 
