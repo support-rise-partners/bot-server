@@ -8,91 +8,118 @@ const TEMP_DIR = path.resolve('tmp_attachments');
 const FILE_LIFETIME_MINUTES = 15;
 const SERVER_HOST = process.env.SERVER_HOST;
 
-/**
- * Очищает временную директорию от старых файлов (старше 15 мин)
- */
 function cleanUpOldFiles() {
     if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
-
     const now = Date.now();
     for (const file of fs.readdirSync(TEMP_DIR)) {
         const filePath = path.join(TEMP_DIR, file);
         const stats = fs.statSync(filePath);
         const ageMinutes = (now - stats.mtimeMs) / 60000;
-        if (ageMinutes > FILE_LIFETIME_MINUTES) {
-            fs.unlinkSync(filePath);
-        }
+        if (ageMinutes > FILE_LIFETIME_MINUTES) fs.unlinkSync(filePath);
     }
 }
 
-/**
- * Сохраняет изображение в tmp и возвращает URL
- */
-function saveImageToTmp(buffer, extension = 'png') {
-    const fileName = `${uuidv4()}.${extension}`;
+function saveToTmp(buffer, extension = 'bin') {
+    const safeExt = (extension || 'bin').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'bin';
+    const fileName = `${uuidv4()}.${safeExt}`;
     const filePath = path.join(TEMP_DIR, fileName);
     fs.writeFileSync(filePath, buffer);
     return `${SERVER_HOST}/tmp/${fileName}`;
 }
 
-/**
- * Главная функция: извлекает и сохраняет изображения из context
- */
+function extFromContentType(ct = '') {
+    const type = ct.toLowerCase();
+    if (type.startsWith('image/')) return type.split('/')[1] || 'png';
+    if (type === 'application/pdf') return 'pdf';
+    if (type === 'application/msword') return 'doc';
+    if (type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
+    return '';
+}
+
+function extFromName(name = '') {
+    const m = name.toLowerCase().match(/\.([a-z0-9]+)$/);
+    return m ? m[1] : '';
+}
+
+async function fetchWithBotToken(url) {
+    const credentials = new MicrosoftAppCredentials(
+        process.env.MicrosoftAppId,
+        process.env.MicrosoftAppPassword
+    );
+    const token = await credentials.getToken();
+    const response = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        responseType: 'arraybuffer'
+    });
+    return Buffer.from(response.data, 'binary');
+}
+
+async function fetchDirect(url) {
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
+    return Buffer.from(response.data, 'binary');
+}
+
 export async function extractImagesFromContext(context) {
     const fileNotices = [];
     const attachments = context.activity?.attachments || [];
-    if (!attachments.length) return { imageUrls: [], fileNotices: [] };
+    if (!attachments.length) return { imageUrls: [], docUrls: [], fileNotices: [] };
 
-    cleanUpOldFiles(); // очищаем старые перед началом
+    cleanUpOldFiles();
 
     const imageUrls = [];
+    const docUrls = [];
 
     for (const attachment of attachments) {
-        let fileBuffer;
-        let extension = 'png';
+        const ct = (attachment.contentType || '').toLowerCase();
+        const name = attachment.name || '';
+        let buffer = null;
+        let extension = '';
 
-        if (attachment.contentType.startsWith('image/')) {
-            // Вставленное изображение, нужно авторизоваться
-            const credentials = new MicrosoftAppCredentials(
-                process.env.MicrosoftAppId,
-                process.env.MicrosoftAppPassword
-            );
-            const token = await credentials.getToken();
+        const isImage = ct.startsWith('image/');
+        const isPdf = ct === 'application/pdf' || /\.pdf$/i.test(name || '');
+        const isDoc = ct === 'application/msword' || /\.doc$/i.test(name || '');
+        const isDocx = ct === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || /\.docx$/i.test(name || '');
+        const needsAuthFetch = !!attachment.contentUrl; 
+        const hasPublicDownload = !!attachment.content?.downloadUrl;
 
-            const response = await axios.get(attachment.contentUrl, {
-                headers: { Authorization: `Bearer ${token}` },
-                responseType: 'arraybuffer'
-            });
-
-            fileBuffer = Buffer.from(response.data, 'binary');
-            extension = attachment.contentType.split('/')[1] || 'png';
-            if (!extension || extension === '*') {
-                extension = 'png';
+        try {
+            if (isImage) {
+                buffer = needsAuthFetch
+                    ? await fetchWithBotToken(attachment.contentUrl)
+                    : hasPublicDownload
+                        ? await fetchDirect(attachment.content.downloadUrl)
+                        : null;
+                extension = extFromContentType(ct) || extFromName(name) || 'png';
+                if (!buffer) continue;
+                imageUrls.push(saveToTmp(buffer, extension));
+                continue;
             }
 
-        } else if (
-            attachment.content?.downloadUrl &&
-            attachment.name?.match(/\.(png|jpe?g|gif|bmp|webp)$/i)
-        ) {
-            const response = await axios.get(attachment.content.downloadUrl, {
-                responseType: 'arraybuffer'
-            });
-            fileBuffer = Buffer.from(response.data, 'binary');
-            const rawExt = path.extname(attachment.name).slice(1).toLowerCase();
-            const allowedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'];
-            extension = allowedExts.includes(rawExt) ? rawExt : 'png';
+            if (isPdf || isDoc || isDocx) {
+                buffer = needsAuthFetch
+                    ? await fetchWithBotToken(attachment.contentUrl)
+                    : hasPublicDownload
+                        ? await fetchDirect(attachment.content.downloadUrl)
+                        : null;
+                extension = extFromContentType(ct) || extFromName(name) || (isPdf ? 'pdf' : isDocx ? 'docx' : 'doc');
+                if (!buffer) {
+                    fileNotices.push(`Anhang konnte nicht geladen werden: ${name || '(unbenannt)'}`);
+                    continue;
+                }
+                docUrls.push(saveToTmp(buffer, extension));
+                fileNotices.push(`gespeicherte Datei: ${name || '(unbenannt)'} (Format .${extension})`);
+                continue;
+            }
 
-        } else if (attachment.name && !attachment.contentType.startsWith("image/")) {
-            const ext = path.extname(attachment.name);
-            fileNotices.push(`angehängte Datei: ${attachment.name} (Format ${ext})`);
-            continue;
-        } else {
-            continue;
+            if (name && !isImage) {
+                const ext = path.extname(name);
+                fileNotices.push(`angehängte Datei: ${name} (Format ${ext})`);
+                continue;
+            }
+        } catch (e) {
+            fileNotices.push(`Fehler beim Verarbeiten von ${name || '(unbenannt)'}: ${e?.message || e}`);
         }
-
-        const publicUrl = saveImageToTmp(fileBuffer, extension);
-        imageUrls.push(publicUrl);
     }
 
-    return { imageUrls, fileNotices };
+    return { imageUrls, docUrls, fileNotices };
 }
