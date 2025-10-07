@@ -27,12 +27,17 @@ class MyBot extends ActivityHandler {
                 const sessionId = context.activity.conversation.id;
                 const userName = context.activity.from.name;
                 const { imageUrls, fileNotices } = await extractImagesFromContext(context);
+                const safeImages = (imageUrls || []).filter(u =>
+                  typeof u === 'string' && (u.startsWith('https://') || /^data:image\/(png|jpeg);base64,/.test(u))
+                ).slice(0, 4);
                 if (fileNotices.length > 0) {
                     userText += ' \n ' + fileNotices.join(', ');
                 }
                 await context.sendActivity({ type: 'typing' });
                 await saveOrUpdateReference(context);
-                await getStrictSemanticAnswerString(userText, sessionId);
+                getStrictSemanticAnswerString(userText, sessionId).catch(err => {
+                  console.error('RAG error:', err && (err.stack || err));
+                });
 
 
                 const [response] = await Promise.all([
@@ -41,7 +46,7 @@ class MyBot extends ActivityHandler {
                         role: 'user',
                         text: userText,
                         userName,
-                        imageUrls
+                        imageUrls: safeImages
                     }),
                     new Promise(resolve => setTimeout(resolve, 100))
                 ]);
@@ -53,40 +58,54 @@ class MyBot extends ActivityHandler {
                 }
 
                 if (functionCall) {
+                    let args = {};
+                    try {
+                      args = typeof functionCall.arguments === 'string'
+                        ? JSON.parse(functionCall.arguments || '{}')
+                        : (functionCall.arguments || {});
+                    } catch (e) {
+                      console.warn('⚠️ Konnte functionCall.arguments nicht parsen:', functionCall.arguments);
+                    }
+
                     let typingActive = true;
+                    const endAt = Date.now() + 40000; // 40s safety cap
                     const typingLoop = async () => {
-                        while (typingActive) {
-                            try {
-                                await context.sendActivity({ type: 'typing' });
-                            } catch (err) {
-                                console.error('❌ Fehler beim Senden des "typing"-Events:', err.message);
-                                break;
-                            }
-                            await new Promise(res => setTimeout(res, 1000));
+                      while (typingActive && Date.now() < endAt) {
+                        try {
+                          await context.sendActivity({ type: 'typing' });
+                        } catch (err) {
+                          console.error('❌ Fehler beim Senden des "typing"-Events:', err && (err.message || err));
+                          break;
                         }
+                        await new Promise(res => setTimeout(res, 1000));
+                      }
                     };
                     const typingTask = typingLoop();
 
+                    let functionReply;
                     try {
-                        const [functionModule] = await Promise.all([
-                            import(`../functions/${functionCall.name}.js`),
-                            new Promise(resolve => setTimeout(resolve, 500))
-                        ]);
+                      const [functionModule] = await Promise.all([
+                        import(`../functions/${functionCall.name}.js`),
+                        new Promise(resolve => setTimeout(resolve, 300))
+                      ]);
 
-                        const functionReply = await functionModule.default(sessionId, userName, functionCall.arguments);
-
-                        if (functionReply) {
-                            await context.sendActivity(MessageFactory.text(functionReply));
-                        }
+                      functionReply = await functionModule.default(sessionId, userName, args);
+                    } catch (e) {
+                      console.error(`❌ Funktionsaufruf "${functionCall.name}" fehlgeschlagen:`, e && (e.stack || e));
+                      await context.sendActivity(`⚠️ Funktion "${functionCall.name}" ist momentan nicht verfügbar.`);
                     } finally {
-                        typingActive = false;
-                        await typingTask;
+                      typingActive = false;
+                      await typingTask;
+                    }
+
+                    if (functionReply) {
+                      await context.sendActivity(MessageFactory.text(functionReply));
                     }
                 }
 
             } catch (error) {
-                console.error("❌ Fehler in onMessage:", error.message);
-                if (error.status === 400 && error.message?.includes("filtered due to the prompt triggering")) {
+                console.error("❌ Fehler in onMessage (full):", error && (error.stack || error));
+                if (error?.status === 400 && String(error.message || '').includes("filtered due to the prompt triggering")) {
                     await context.sendActivity("⚠️ Diese Anfrage wurde vom System blockiert. Bitte formuliere sie etwas anders.");
                 } else {
                     await context.sendActivity("❗ Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
