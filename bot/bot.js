@@ -17,6 +17,8 @@ class MyBot extends ActivityHandler {
     constructor() {
         super();
         this.onMessage(async (context, next) => {
+            const t0 = Date.now();
+            console.log(`⏱️ [START] Nachricht empfangen um ${new Date(t0).toISOString()}`);
             try {
                 let userText = context.activity.text || '';
                 console.log("💬 Eingehende Nachricht:", {
@@ -35,10 +37,14 @@ class MyBot extends ActivityHandler {
                 }
                 await context.sendActivity({ type: 'typing' });
                 await saveOrUpdateReference(context);
+                const t1 = Date.now();
+                console.log(`⏱️ [AFTER saveOrUpdateReference] +${t1 - t0} ms`);
                 getStrictSemanticAnswerString(userText, sessionId).catch(err => {
                   console.error('RAG error:', err && (err.stack || err));
                 });
 
+                const t2 = Date.now();
+                console.log(`⏱️ [BEFORE getChatCompletion] +${t2 - t0} ms`);
 
                 const [response] = await Promise.all([
                     getChatCompletion({
@@ -50,6 +56,9 @@ class MyBot extends ActivityHandler {
                     }),
                     new Promise(resolve => setTimeout(resolve, 100))
                 ]);
+
+                const t3 = Date.now();
+                console.log(`⏱️ [AFTER getChatCompletion] +${t3 - t0} ms`);
 
                 const { reply, functionCall } = response;
 
@@ -111,6 +120,9 @@ class MyBot extends ActivityHandler {
                     await context.sendActivity("❗ Es ist ein Fehler aufgetreten. Bitte versuche es später erneut.");
                 }
             }
+
+            const t4 = Date.now();
+            console.log(`✅ [END] Gesamtdauer onMessage: ${t4 - t0} ms`);
 
             await next();
         });
