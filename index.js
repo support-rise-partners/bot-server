@@ -6,7 +6,6 @@ import { adapter } from './bot/adapter.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 import 'dotenv/config';
-import { BotFrameworkAdapter } from 'botbuilder';
 import { MyBot } from './bot/bot.js';
 import notifyUser from './functions/notify_user.js';
 import { startExternalWeeklyScheduler } from './services/blobExportService/sitesExport.js';

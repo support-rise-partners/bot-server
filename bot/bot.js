@@ -19,6 +19,11 @@ class MyBot extends ActivityHandler {
         this.onMessage(async (context, next) => {
             try {
                 let userText = context.activity.text || '';
+                console.log("💬 Eingehende Nachricht:", {
+                  from: context.activity.from.name,
+                  text: userText,
+                  timestamp: context.activity.timestamp
+                });
                 const sessionId = context.activity.conversation.id;
                 const userName = context.activity.from.name;
                 const { imageUrls, fileNotices } = await extractImagesFromContext(context);
