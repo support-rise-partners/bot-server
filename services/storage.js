@@ -104,7 +104,7 @@ function startNightlyCleanup() {
 // Scheduler direkt aktivieren, sobald dieses Modul geladen wird
 startNightlyCleanup();
 
-async function getLastMessages(sessionId, limit = 40) {
+async function getLastMessages(sessionId, limit = 30) {
     try {
         const sinceTimestamp = Date.now() - MESSAGE_HISTORY_WINDOW_MINUTES * 60 * 1000;
         const entities = client.listEntities({
