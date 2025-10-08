@@ -95,11 +95,7 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
             lastMessage
         ];
 
-        console.log("➡️ OpenAI request payload:", JSON.stringify({
-            messages,
-            functions,
-            function_call: "auto"
-        }, null, 2));
+        console.log("📨 Vollständige Nachrichten an OpenAI:", JSON.stringify(messages, null, 2));
 
         const response = await client.chat.completions.create({
             model: deployment,
@@ -110,6 +106,8 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
             temperature: 0.9,
             top_p: 0.9
         });
+
+        console.log("🧠 OpenAI-Antwort:", JSON.stringify(response, null, 2));
 
         await saveMessage(sessionId, role, text);
 
