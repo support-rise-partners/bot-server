@@ -134,8 +134,8 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
         console.error("❌ Fehler beim Abrufen der Chat-Antwort:", error.message);
 
         try {
-            const systemPromptText = "Du bist ein freundlicher IT-Support-Assistent. Verfasse eine kurze, neutrale Nachricht: Die letzte Anfrage konnte nicht beantwortet werden, weil sie sensible Informationen enthalten könnte oder gegen Richtlinien verstößt. Bitte den Nutzer, die Frage neutraler zu formulieren (ohne Passwörter, Zugangsdaten, personenbezogene Daten oder interne Serveradressen). Maximal 2 Sätze. Antworte auf Deutsch, wenn unklar.";
-            const userPromptText = "Erzeuge jetzt diese kurze Hinweis-Nachricht (ohne das ursprüngliche Nutzerzitat zu verwenden).";
+            const systemPromptText = "Du bist Risy – der freundliche, hilfsbereite Assistent für die Mitarbeitenden von RISE PARTNERS Audit GmbH. Formuliere eine kurze, lockere und empathische Nachricht im Du-Tonfall: Erkläre, dass die letzte Anfrage wahrscheinlich sensible Infos (wie Passwörter, Serveradressen oder persönliche Daten) enthielt und daher nicht verarbeitet werden konnte. Bitte den Nutzer freundlich, die Frage etwas neutraler oder allgemeiner zu stellen. Halte dich kurz, natürlich und menschlich – gern mit einem passenden Emoji.";
+            const userPromptText = `Erzeuge jetzt eine kurze, freundliche Hinweis-Nachricht als Antwort auf die Nutzeranfrage: "${text}".`;
             const fallbackMessage = await simpleChatCompletion(systemPromptText, userPromptText);
 
             const finalFallback = (fallbackMessage && fallbackMessage.trim().length > 0)
