@@ -39,9 +39,13 @@ class MyBot extends ActivityHandler {
                 await saveOrUpdateReference(context);
                 const t1 = Date.now();
                 console.log(`⏱️ [AFTER saveOrUpdateReference] +${t1 - t0} ms`);
-                getStrictSemanticAnswerString(userText, sessionId).catch(err => {
+                const ragStart = Date.now();
+                try {
+                  await getStrictSemanticAnswerString(userText, sessionId);
+                } catch (err) {
                   console.error('RAG error:', err && (err.stack || err));
-                });
+                }
+                console.log(`⏱️ [AFTER RAG] +${Date.now() - t0} ms (RAG ${Date.now() - ragStart} ms)`);
 
                 const t2 = Date.now();
                 console.log(`⏱️ [BEFORE getChatCompletion] +${t2 - t0} ms`);
