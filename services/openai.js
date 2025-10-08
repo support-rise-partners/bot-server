@@ -135,7 +135,7 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
 
         try {
             const systemPromptText = "Du bist ein freundlicher IT-Support-Assistent. Wenn eine Anfrage nicht verarbeitet werden kann, erkläre dem Benutzer kurz, dass die Anfrage möglicherweise sensible Daten enthält oder ein Problem aufgetreten ist. Bitte ihn, es später erneut zu versuchen oder die Anfrage neutraler zu formulieren. Antworte in maximal zwei Sätzen und in der Sprache der Benutzereingabe, wenn erkennbar.";
-            const userPromptText = "Fehlerbehandlung: Erzeuge eine höfliche Benachrichtigung, dass die Anfrage nicht verarbeitet werden konnte. Anfrage: ", text;
+            const userPromptText = text || "Fehlerbehandlung: Erzeuge eine höfliche Benachrichtigung, dass die Anfrage nicht verarbeitet werden konnte.";
             const fallbackMessage = await simpleChatCompletion(systemPromptText, userPromptText);
 
             await saveMessage(sessionId, 'assistant', fallbackMessage);
