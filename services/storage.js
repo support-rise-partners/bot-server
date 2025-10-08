@@ -123,7 +123,16 @@ async function getLastMessages(sessionId, limit = 40) {
         }
 
         results.sort((a, b) => parseInt(a.timestamp) - parseInt(b.timestamp));
-        return results.slice(-limit);
+
+        // Оставляем только три последние system-сообщения, сохраняя хронологический порядок всей ленты
+        const systemMessages = results.filter(m => m.role === 'system');
+        const lastSystemMessages = systemMessages.slice(-3);
+        const allowedSystemTimestamps = new Set(lastSystemMessages.map(m => m.timestamp));
+
+        // Фильтруем исходный уже отсортированный список: пропускаем все non-system и только разрешённые system
+        const filtered = results.filter(m => m.role !== 'system' || allowedSystemTimestamps.has(m.timestamp));
+
+        return filtered.slice(-limit);
     } catch (error) {
         console.error("Fehler beim Abrufen der Nachrichten:", error.message);
         return [];
