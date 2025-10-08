@@ -134,13 +134,17 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
         console.error("❌ Fehler beim Abrufen der Chat-Antwort:", error.message);
 
         try {
-            const systemPromptText = "Du bist ein freundlicher IT-Support-Assistent. Wenn eine Anfrage nicht verarbeitet werden kann, erkläre dem Benutzer kurz, dass die Anfrage möglicherweise sensible Daten enthält oder ein Problem aufgetreten ist. Bitte ihn, es später erneut zu versuchen oder die Anfrage neutraler zu formulieren. Antworte in maximal zwei Sätzen und in der Sprache der Benutzereingabe, wenn erkennbar.";
-            const userPromptText = text || "Fehlerbehandlung: Erzeuge eine höfliche Benachrichtigung, dass die Anfrage nicht verarbeitet werden konnte.";
+            const systemPromptText = "Du bist ein freundlicher IT-Support-Assistent. Verfasse eine kurze, neutrale Nachricht: Die letzte Anfrage konnte nicht beantwortet werden, weil sie sensible Informationen enthalten könnte oder gegen Richtlinien verstößt. Bitte den Nutzer, die Frage neutraler zu formulieren (ohne Passwörter, Zugangsdaten, personenbezogene Daten oder interne Serveradressen). Maximal 2 Sätze. Antworte auf Deutsch, wenn unklar.";
+            const userPromptText = "Erzeuge jetzt diese kurze Hinweis-Nachricht (ohne das ursprüngliche Nutzerzitat zu verwenden).";
             const fallbackMessage = await simpleChatCompletion(systemPromptText, userPromptText);
 
-            await saveMessage(sessionId, 'assistant', fallbackMessage);
+            const finalFallback = (fallbackMessage && fallbackMessage.trim().length > 0)
+              ? fallbackMessage.trim()
+              : "⚠️ Die Anfrage konnte nicht verarbeitet werden. Bitte versuche es später erneut.";
+
+            await saveMessage(sessionId, 'assistant', finalFallback);
             return {
-                reply: fallbackMessage,
+                reply: finalFallback,
                 functionCall: null
             };
         } catch (fallbackError) {
@@ -173,6 +177,6 @@ export async function simpleChatCompletion(systemPromptText, userPromptText) {
         return response.choices?.[0]?.message?.content || "";
     } catch (error) {
         console.error("❌ Fehler bei simpleChatCompletion:", error.message);
-        return "";
+        return "⚠️ Die Anfrage konnte nicht verarbeitet werden. Bitte versuche es später erneut.";
     }
 }
