@@ -132,10 +132,26 @@ export async function getChatCompletion({ sessionId, role, text, userName, image
         };
     } catch (error) {
         console.error("❌ Fehler beim Abrufen der Chat-Antwort:", error.message);
-        return {
-            reply: "⚠️ Die Anfrage konnte nicht verarbeitet werden. Bitte versuche es später erneut.",
-            functionCall: null
-        };
+
+        try {
+            const systemPromptText = "Du bist ein freundlicher IT-Support-Assistent. Wenn eine Anfrage nicht verarbeitet werden kann, erkläre dem Benutzer kurz, dass die Anfrage möglicherweise sensible Daten enthält oder ein Problem aufgetreten ist. Bitte ihn, es später erneut zu versuchen oder die Anfrage neutraler zu formulieren. Antworte in maximal zwei Sätzen und in der Sprache der Benutzereingabe, wenn erkennbar.";
+            const userPromptText = text || "Fehlerbehandlung: Erzeuge eine höfliche Benachrichtigung, dass die Anfrage nicht verarbeitet werden konnte.";
+            const fallbackMessage = await simpleChatCompletion(systemPromptText, userPromptText);
+
+            await saveMessage(sessionId, 'assistant', fallbackMessage);
+            return {
+                reply: fallbackMessage,
+                functionCall: null
+            };
+        } catch (fallbackError) {
+            console.error('⚠️ Fehler beim Erzeugen der Fallback-Nachricht:', fallbackError.message);
+            const fallbackText = "⚠️ Die Anfrage konnte nicht verarbeitet werden. Bitte versuche es später erneut.";
+            await saveMessage(sessionId, 'assistant', fallbackText);
+            return {
+                reply: fallbackText,
+                functionCall: null
+            };
+        }
     }
 }
 
