@@ -37,10 +37,36 @@ function parseJsonSafe(raw) {
   return null;
 }
 
+import crypto from 'node:crypto';
+
 function buildAcsName(prefix, sessionId) {
-  // Replace non-alphanumeric characters with dashes and lowercase
-  const safeSessionId = sessionId.toLowerCase().replace(/[^a-z0-9]/g, '-');
-  return `${prefix}${safeSessionId}`;
+  // 1) Normalisieren
+  let slug = (sessionId || '').toString().toLowerCase()
+    .replace(/[^a-z0-9-]/g, '-')     // nur a-z0-9-
+    .replace(/-{2,}/g, '-')          // mehrere - zu einem
+    .replace(/^-+|-+$/g, '');        // trim -
+
+  // 2) Hash für Eindeutigkeit
+  const hash = crypto.createHash('sha1').update(String(sessionId || 'sess')).digest('hex').slice(0, 8);
+
+  // 3) Max-Länge beachten: insgesamt <=128
+  //   finale Form: `${prefix}${slug}-${hash}`
+  const maxTotal = 128;
+  const fixed = `${prefix}`; // prefix wie "ds-", "ss-", "idx-", "idxr-"
+  const tail = `-${hash}`;
+  const maxSlugLen = Math.max(1, maxTotal - fixed.length - tail.length);
+  if (slug.length > maxSlugLen) slug = slug.slice(0, maxSlugLen);
+
+  // Wenn slug nach Kürzung leer ist, nutze 's'
+  if (!slug) slug = 's';
+
+  // 4) Zusammensetzen (Prefix enthält nur a-z0-9- und endet nicht mit - in unseren Aufrufen)
+  let name = `${fixed}${slug}${tail}`;
+
+  // Sicherheits-Trim, falls doch mal ein - am Ende landet
+  name = name.replace(/^-+|-+$/g, '');
+
+  return name;
 }
 
 function resourceNames(sessionId) {
