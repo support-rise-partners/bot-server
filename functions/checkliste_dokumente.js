@@ -238,8 +238,10 @@ async function ensureDataSource(sessionId) {
     description: 'Data source for temporary chat session documents',
     type: 'azureblob',
     credentials: { connectionString: AZURE_STORAGE_CONNECTION_STRING },
-    container: { name: 'chat-temp-docs', query: prefix },
-    dataDeletionDetectionPolicy: { odataType: '#Microsoft.Azure.Search.NativeBlobSoftDeleteDeletionDetectionPolicy' }
+    container: { name: 'chat-temp-docs', query: prefix }
+    // Hinweis: dataDeletionDetectionPolicy ausgelassen, da die verwendete SDK-Version/Api-Version
+    // den Typ '#Microsoft.Azure.Search.NativeBlobSoftDeleteDeletionDetectionPolicy' nicht kennt.
+    // Für temporäre Sessions ist die Lösch-Erkennung nicht zwingend nötig.
   };
 
   try {
