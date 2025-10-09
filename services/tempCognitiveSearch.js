@@ -205,7 +205,7 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       configurations: [
         {
           name: 'risy-knowledge-rag-semantic',
-          rankingOrder: 'BoostedRerankerScore',
+          // rankingOrder: 'BoostedRerankerScore', // Removed for API version 2023-11-01
           prioritizedFields: {
             titleField: { fieldName: 'document_title' },
             prioritizedContentFields: [ { fieldName: 'content_text' } ],
