@@ -197,7 +197,7 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       { name: 'document_title',    type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
       { name: 'content_text',      type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
       { name: 'source_url',        type: 'Edm.String', searchable: false, filterable: true, retrievable: true },
-      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchProfile: 'risy-knowledge-rag-text-profile' }
+      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchConfiguration: 'hnsw-cosine' }
     ],
     similarity: { '@odata.type': '#Microsoft.Azure.Search.BM25Similarity' },
     semantic: {
@@ -215,32 +215,13 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       ]
     },
     vectorSearch: {
-      algorithms: [
+      algorithmConfigurations: [
         {
-          name: 'risy-knowledge-rag-hnsw',
+          name: 'hnsw-cosine',
           kind: 'hnsw',
           hnswParameters: { metric: 'cosine', m: 4, efConstruction: 400, efSearch: 500 }
         }
-      ],
-      profiles: [
-        {
-          name: 'risy-knowledge-rag-text-profile',
-          algorithm: 'risy-knowledge-rag-hnsw',
-          vectorizer: 'risy-knowledge-rag-text-vectorizer'
-        }
-      ],
-      vectorizers: [
-        {
-          name: 'risy-knowledge-rag-text-vectorizer',
-          kind: 'azureOpenAI',
-          azureOpenAIParameters: {
-            resourceUri: AZURE_OPENAI_ENDPOINT,
-            deploymentId: AZURE_OPENAI_EMBED_DEPLOYMENT,
-            modelName: AZURE_OPENAI_EMBED_DEPLOYMENT
-          }
-        }
-      ],
-      compressions: []
+      ]
     }
   };
 
