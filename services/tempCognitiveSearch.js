@@ -223,6 +223,8 @@ async function ensureDataSource({ sessionId, container = BLOB_CONTAINER, prefix 
 
 // Erstellt oder aktualisiert temporären Index für diese Sitzung
 async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensions = 1536 }) {
+  requireEnv('AZURE_OPENAI_ENDPOINT');
+  requireEnv('AZURE_OPENAI_EMBED_DEPLOYMENT');
   const { indexName: defaultIndex } = resourceNames(sessionId);
   const name = indexName || defaultIndex;
 
@@ -271,7 +273,7 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
           name: 'text-vectorizer',
           kind: 'azureOpenAI',
           azureOpenAIParameters: {
-            resourceUri: AZURE_OPENAI_ENDPOINT,
+            uri: AZURE_OPENAI_ENDPOINT,
             deploymentId: AZURE_OPENAI_EMBED_DEPLOYMENT,
             modelName: AZURE_OPENAI_EMBED_DEPLOYMENT
           }
