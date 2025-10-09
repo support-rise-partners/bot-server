@@ -1,11 +1,20 @@
 import { SearchIndexClient, SearchIndexerClient, AzureKeyCredential } from '@azure/search-documents';
 import { DefaultAzureCredential } from '@azure/identity';
 
-const AZURE_SEARCH_SERVICE_ENDPOINT = process.env.AZURE_SEARCH_SERVICE_ENDPOINT;
-const AZURE_SEARCH_API_KEY = process.env.AZURE_SEARCH_API_KEY;
-const AZURE_OPENAI_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT;
-const AZURE_OPENAI_EMBED_DEPLOYMENT = process.env.AZURE_OPENAI_EMBED_DEPLOYMENT;
-const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
+// Werte aus .env (exakt wie in deiner Umgebung benannt)
+const AZURE_SEARCH_ENDPOINT = (process.env.AZURE_SEARCH_ENDPOINT || '').trim();
+const AZURE_SEARCH_API_KEY = (process.env.AZURE_SEARCH_API_KEY || '').trim();
+const AZURE_OPENAI_ENDPOINT = (process.env.AZURE_OPENAI_ENDPOINT || '').trim();
+const AZURE_OPENAI_EMBED_DEPLOYMENT = (process.env.AZURE_OPENAI_EMBED_DEPLOYMENT || '').trim();
+const AZURE_STORAGE_CONNECTION_STRING = (process.env.AZURE_STORAGE_CONNECTION_STRING || '').trim();
+
+function ensureHttpsEndpoint(url, varName) {
+  if (!url) throw new Error(`Env-Variable ${varName} ist nicht gesetzt`);
+  if (!/^https?:\/\//i.test(url)) throw new Error(`Env-Variable ${varName} muss mit https:// beginnen`);
+  return url.replace(/\/$/, '');
+}
+
+const SEARCH_ENDPOINT = ensureHttpsEndpoint(AZURE_SEARCH_ENDPOINT, 'AZURE_SEARCH_ENDPOINT');
 
 const API_MGMT  = '2025-08-01-preview';
 
@@ -31,8 +40,8 @@ const credential = AZURE_SEARCH_API_KEY
   ? new AzureKeyCredential(AZURE_SEARCH_API_KEY)
   : new DefaultAzureCredential();
 
-const indexClient = new SearchIndexClient(AZURE_SEARCH_SERVICE_ENDPOINT, credential);
-const indexerClient = new SearchIndexerClient(AZURE_SEARCH_SERVICE_ENDPOINT, credential);
+const indexClient = new SearchIndexClient(SEARCH_ENDPOINT, credential);
+const indexerClient = new SearchIndexerClient(SEARCH_ENDPOINT, credential);
 
 async function createOrUpdateTempIndex(sessionId) {
   const { indexName } = resourceNames(sessionId);
