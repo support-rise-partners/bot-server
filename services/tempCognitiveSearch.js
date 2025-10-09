@@ -192,12 +192,12 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
   const definition = {
     name,
     fields: [
-      { name: 'content_id',        type: 'Edm.String', key: true, analyzer: 'keyword', searchable: true, retrievable: true, filterable: false, sortable: true, facetable: false, stored: true },
-      { name: 'text_document_id',  type: 'Edm.String', searchable: false, filterable: true, retrievable: true, stored: true },
-      { name: 'document_title',    type: 'Edm.String', searchable: true,  filterable: false, retrievable: true, stored: true },
-      { name: 'content_text',      type: 'Edm.String', searchable: true,  filterable: false, retrievable: true, stored: true },
-      { name: 'source_url',        type: 'Edm.String', searchable: false, filterable: true, retrievable: true, stored: true },
-      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchProfile: 'risy-knowledge-rag-text-profile', stored: true }
+      { name: 'content_id',        type: 'Edm.String', key: true, analyzer: 'keyword', searchable: true, retrievable: true, filterable: false, sortable: true, facetable: false },
+      { name: 'text_document_id',  type: 'Edm.String', searchable: false, filterable: true, retrievable: true },
+      { name: 'document_title',    type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
+      { name: 'content_text',      type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
+      { name: 'source_url',        type: 'Edm.String', searchable: false, filterable: true, retrievable: true },
+      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchProfile: 'risy-knowledge-rag-text-profile' }
     ],
     similarity: { '@odata.type': '#Microsoft.Azure.Search.BM25Similarity' },
     semantic: {
