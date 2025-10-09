@@ -97,14 +97,26 @@ function sanitizeForAcsName(input) {
   return name;
 }
 
-function resourceNames(sessionId) {
+function buildAcsName(prefix, sessionId) {
   const sid = sanitizeForAcsName(sessionId);
+  const max = 128;
+  let name = `${prefix}${sid}`;
+  if (name.length > max) {
+    const keep = Math.max(1, max - prefix.length);
+    name = `${prefix}${sid.slice(0, keep)}`;
+  }
+  // Sicherheit: keine Bindestriche am Anfang/Ende
+  name = name.replace(/^-+/, '').replace(/-+$/, '');
+  return name;
+}
+
+function resourceNames(sessionId) {
   return {
-    dataSourceName: `ds-${sid}`,
-    skillsetName: `ss-${sid}`,
-    indexName: `idx-${sid}`,
-    indexerName: `idxr-${sid}`,
-    prefix: `runs/${sessionId}/` // Präfix im Blob darf original bleiben
+    dataSourceName: buildAcsName('ds-', sessionId),
+    skillsetName:   buildAcsName('ss-', sessionId),
+    indexName:      buildAcsName('idx-', sessionId),
+    indexerName:    buildAcsName('idxr-', sessionId),
+    prefix:         `runs/${sessionId}/` // Präfix im Blob darf original bleiben
   };
 }
 
@@ -458,6 +470,7 @@ async function cleanupSessionResources({ sessionId, deleteIndex = true, deleteDa
 // Orchestrator: Führt alle Schritte für eine Sitzung mit dynamischen Namen aus
 async function prepareAndIndexSession({ sessionId, urls, container = BLOB_CONTAINER }) {
   const names = resourceNames(sessionId);
+  console.debug('[ACS resourceNames]', names);
 
   // 1) Dateien hochladen
   await uploadSessionBlobsFromUrls({ sessionId, urls, container, prefix: names.prefix });
