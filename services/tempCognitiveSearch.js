@@ -234,7 +234,7 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       { name: 'document_title',    type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
       { name: 'content_text',      type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
       { name: 'source_url',        type: 'Edm.String', searchable: false, filterable: true, retrievable: true },
-      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchConfiguration: 'hnsw-cosine' }
+      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchProfile: 'hnsw-profile' }
     ],
     similarity: { '@odata.type': '#Microsoft.Azure.Search.BM25Similarity' },
     semantic: {
@@ -252,11 +252,17 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       ]
     },
     vectorSearch: {
-      algorithmConfigurations: [
+      algorithms: [
         {
           name: 'hnsw-cosine',
           kind: 'hnsw',
           hnswParameters: { metric: 'cosine', m: 4, efConstruction: 400, efSearch: 500 }
+        }
+      ],
+      profiles: [
+        {
+          name: 'hnsw-profile',
+          algorithm: 'hnsw-cosine'
         }
       ]
     }
