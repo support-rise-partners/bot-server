@@ -73,14 +73,14 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
   if (_error) {
     const results = [{ frage: null, antwort: 'Fehler beim Verarbeiten der Eingabe.', zitat: _error }];
     console.log(results);
-    return results;
+    return JSON.stringify(results);
   }
 
   // Нет документов — сразу возвращаем понятный ответ (не пустой)
   if (!dokumente.length) {
     const results = [{ frage: null, antwort: 'Keine Dokumente übermittelt.', zitat: '' }];
     console.log(results);
-    return results;
+    return JSON.stringify(results);
   }
 
   const results = [];
@@ -144,5 +144,5 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
 
   // В консоль выводим именно массив результатов (не пустую строку)
   console.log(results);
-  return results;
+  return JSON.stringify(results);
 }
