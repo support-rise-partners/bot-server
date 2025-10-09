@@ -8,6 +8,10 @@ const TEMP_DIR = path.resolve('tmp_attachments');
 const FILE_LIFETIME_MINUTES = 15;
 const SERVER_HOST = process.env.SERVER_HOST;
 
+if (!SERVER_HOST) {
+    console.warn('⚠️ SERVER_HOST is not set. Public URLs for attachments may be invalid.');
+}
+
 function cleanUpOldFiles() {
     if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
     const now = Date.now();
@@ -15,15 +19,55 @@ function cleanUpOldFiles() {
         const filePath = path.join(TEMP_DIR, file);
         const stats = fs.statSync(filePath);
         const ageMinutes = (now - stats.mtimeMs) / 60000;
-        if (ageMinutes > FILE_LIFETIME_MINUTES) fs.unlinkSync(filePath);
+        if (ageMinutes > FILE_LIFETIME_MINUTES) {
+            try { fs.unlinkSync(filePath); } catch {}
+            try { fs.unlinkSync(`${filePath}.json`); } catch {}
+        }
     }
 }
 
-function saveImageToTmp(buffer, extension = 'png') {
-    const fileName = `${uuidv4()}.${extension}`;
+function saveFileToTmp(buffer, { extension = 'bin', originalName = '', contentType = '' } = {}) {
+    if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+    const safeExt = (extension || 'bin').replace(/[^a-z0-9]/gi, '').toLowerCase() || 'bin';
+    const fileId = uuidv4();
+    const fileName = `${fileId}.${safeExt}`;
     const filePath = path.join(TEMP_DIR, fileName);
     fs.writeFileSync(filePath, buffer);
+
+    // сохраняем метаданные рядом, чтобы потом можно было корректно чистить/аудитить
+    const meta = {
+        id: fileId,
+        originalName: originalName || null,
+        contentType: contentType || null,
+        extension: safeExt,
+        createdAt: new Date().toISOString()
+    };
+    try { fs.writeFileSync(`${filePath}.json`, JSON.stringify(meta)); } catch {}
+
     return `${SERVER_HOST}/tmp/${fileName}`;
+}
+
+function extFromContentType(ct = '') {
+    const map = {
+        'image/png': 'png',
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'image/bmp': 'bmp',
+        'application/pdf': 'pdf',
+        'application/msword': 'doc',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/vnd.ms-excel': 'xls',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'text/plain': 'txt'
+    };
+    ct = (ct || '').toLowerCase();
+    return map[ct] || '';
+}
+
+function isImageByExt(ext = '') {
+    return ['png','jpg','jpeg','gif','bmp','webp'].includes(String(ext).toLowerCase());
 }
 
 async function fetchWithBotToken(url) {
@@ -54,50 +98,45 @@ export async function extractImagesFromContext(context) {
     const imageUrls = [];
 
     for (const attachment of attachments) {
-        let fileBuffer;
-        let extension = 'png';
+        let fileBuffer = null;
+        let extension = '';
+        const name = attachment.name || '';
+        const ct = (attachment.contentType || '').toLowerCase();
 
-        if ((attachment.contentType || '').toLowerCase().startsWith('image/')) {
-            const ct = (attachment.contentType || '').toLowerCase();
-            const tryDownloadUrl = attachment.content?.downloadUrl;
-
-            if (tryDownloadUrl) {
-                fileBuffer = await fetchDirect(tryDownloadUrl);
-                extension = (ct.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
-            } else if (attachment.contentUrl) {
-                fileBuffer = await fetchWithBotToken(attachment.contentUrl);
-                extension = (ct.split('/')[1] || 'png').replace(/[^a-z0-9]/gi, '') || 'png';
-            } else {
-                continue;
-            }
-        } else if (attachment.content?.downloadUrl && attachment.name?.match(/\.(png|jpe?g|gif|bmp|webp)$/i)) {
-            fileBuffer = await fetchDirect(attachment.content.downloadUrl);
-            const rawExt = path.extname(attachment.name).slice(1).toLowerCase();
-            const allowedExts = ['png', 'jpg', 'jpeg', 'gif', 'bmp', 'webp'];
-            extension = allowedExts.includes(rawExt) ? rawExt : 'png';
-        } else if (attachment.name && !(attachment.contentType || '').toLowerCase().startsWith('image/')) {
-            const ext = path.extname(attachment.name).replace('.', '') || 'bin';
-            let fileBuffer = null;
-
+        // 1) Скачиваем бинарь (с приоритетом на прямую загрузку)
+        try {
             if (attachment.content?.downloadUrl) {
                 fileBuffer = await fetchDirect(attachment.content.downloadUrl);
             } else if (attachment.contentUrl) {
                 fileBuffer = await fetchWithBotToken(attachment.contentUrl);
-            }
-
-            if (fileBuffer) {
-                const publicUrl = saveImageToTmp(fileBuffer, ext);
-                fileNotices.push(`angehängte Datei: ${attachment.name || '(unbenannt)'} (Format .${ext}) Link: ${publicUrl}`);
             } else {
-                fileNotices.push(`angehängte Datei konnte nicht geladen werden: ${attachment.name || '(unbenannt)'}`);
+                // иногда боты присылают contentUrl в content.links[0]
+                const maybeUrl = attachment.content?.contentUrl || attachment.content?.url;
+                if (maybeUrl) fileBuffer = await fetchDirect(maybeUrl);
             }
+        } catch (e) {
+            fileNotices.push(`angehängte Datei konnte nicht geladen werden: ${name || '(unbenannt)'} (${ct || 'unknown'})`);
             continue;
-        } else {
+        }
+        if (!fileBuffer) {
+            fileNotices.push(`angehängte Datei konnte nicht geladen werden: ${name || '(unbenannt)'} (${ct || 'unknown'})`);
             continue;
         }
 
-        const publicUrl = saveImageToTmp(fileBuffer, extension);
-        imageUrls.push(publicUrl);
+        // 2) Определяем расширение по contentType или имени файла
+        const byCt = extFromContentType(ct);
+        const byName = path.extname(name).replace('.', '').toLowerCase();
+        extension = byCt || byName || 'bin';
+
+        // 3) Сохраняем файл единым способом
+        const publicUrl = saveFileToTmp(fileBuffer, { extension, originalName: name, contentType: ct });
+
+        // 4) Классифицируем: изображение → в imageUrls, остальные → в fileNotices
+        if (ct.startsWith('image/') || isImageByExt(extension)) {
+            imageUrls.push(publicUrl);
+        } else {
+            fileNotices.push(`angehängte Datei: ${name || '(unbenannt)'} (Format .${extension}) Link: ${publicUrl}`);
+        }
     }
 
     return { imageUrls, fileNotices };

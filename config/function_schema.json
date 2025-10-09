@@ -98,5 +98,25 @@
         },
         "required": ["recipients", "message"]
     }
+  },
+    {
+    "name": "checkliste_dokumente",
+    "description": "Erfasst aus dem Chatverlauf die Links zu übermittelten Dokumenten sowie die Liste der Fragen, auf die in diesen Dokumenten Antworten gefunden werden sollen.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "dokumente": {
+          "type": "array",
+          "items": { "type": "string", "format": "uri" },
+          "description": "Vom Verlauf erkannte Links/URLs zu Dokumenten (PDF, DOCX). Bitte aus der Chat-Historie extrahieren."
+        },
+        "fragen": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Fragen, auf die in den übermittelten Dokumenten Antworten gefunden werden sollen. Bitte aus der Chat-Historie extrahieren."
+        }
+      },
+      "required": ["dokumente", "fragen"]
+    }
   }
 ]

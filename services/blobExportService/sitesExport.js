@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 /*
+//node services/blobExportService/sitesExport.js --login
   exporter.mjs (ESM)
   Ежемесячная/еженедельная выгрузка контента SharePoint Online в Azure Blob:
   - Документы (docx/xlsx/pptx/pdf) — только новые/изменённые
