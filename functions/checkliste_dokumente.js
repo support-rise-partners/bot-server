@@ -239,7 +239,7 @@ async function ensureDataSource(sessionId) {
     type: 'azureblob',
     credentials: { connectionString: AZURE_STORAGE_CONNECTION_STRING },
     container: { name: 'chat-temp-docs', query: prefix },
-    dataDeletionDetectionPolicy: { '@odata.type': '#Microsoft.Azure.Search.NativeBlobSoftDeleteDeletionDetectionPolicy' }
+    dataDeletionDetectionPolicy: { odataType: '#Microsoft.Azure.Search.NativeBlobSoftDeleteDeletionDetectionPolicy' }
   };
 
   try {
