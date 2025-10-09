@@ -7,7 +7,7 @@ const {
   cleanupSessionResources
 } = require('../services/tempCognitiveSearch');
 
-const { simpleChatCompletion } = require('../services/openai');
+const { simpleChatCompletion, getChatCompletion } = require('../services/openai');
 
 // Hilfsfunktion: baut nutzerfreundlichen Kontext aus Chunks
 function buildContextFromChunks(chunks) {
@@ -44,6 +44,14 @@ exports.default = async function (sessionId, userName, args) {
   if (!dokumente.length) throw new Error('args.dokumente ist leer');
   if (!fragen.length) throw new Error('args.fragen ist leer');
 
+  await getChatCompletion({
+    sessionId,
+    role: 'system',
+    text: 'Hm, ich brauche einen Moment, um die Dokumente zu prüfen und alles durchzusehen. Sobald ich fertig bin, bekommst du eine Excel-Datei mit den Ergebnissen 📊',
+    userName,
+    imageUrls: []
+  });
+
   const results = [];
 
   // 1) Upload + Erstellen aller temporären Ressourcen + Indexierung
@@ -60,7 +68,6 @@ exports.default = async function (sessionId, userName, args) {
       let answerText = '';
       let quoteText = '';
 
-      // OpenAI-Aufruf: erwartet JSON mit { answer, quote }
       const raw = await simpleChatCompletion(DEFAULT_SYSTEM_PROMPT, userPrompt);
 
       try {
@@ -68,21 +75,25 @@ exports.default = async function (sessionId, userName, args) {
         answerText = parsed.answer || '';
         quoteText = parsed.quote || '';
       } catch {
-        // Fallback: falls kein valides JSON — komplette Antwort verwenden
         answerText = typeof raw === 'string' ? raw : String(raw);
-        // Versuche die erste Caption/den ersten Chunk als Zitat zu geben
         quoteText = (chunks[0]?.content_text || '').slice(0, 400);
       }
 
-      results.push({
-        frage,
-        antwort: answerText,
-        zitat: quoteText
-      });
+      results.push({ frage, antwort: answerText, zitat: quoteText });
     }
 
     console.log('\n[Endergebnisse]', results);
     return results;
+  } catch (error) {
+    console.error('Fehler im Dokumenten-Workflow:', error);
+    await getChatCompletion({
+      sessionId,
+      role: 'system',
+      text: `Hoppla, beim Verarbeiten der Dokumente ist ein Fehler aufgetreten: ${error.message || error}`,
+      userName,
+      imageUrls: []
+    });
+    throw error;
   } finally {
     // 3) Aufräumen: Indexer, Index, DataSource, Blobs löschen
     await cleanupSessionResources({ sessionId, deleteIndex: true, deleteDataSource: true, deleteBlobs: true })
