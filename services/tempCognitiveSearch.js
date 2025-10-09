@@ -18,7 +18,7 @@
  *  BLOB_CONTAINER=chat-temp-docs   (Standard)
  * 
  * API-Versionen:
- *  - Verwaltung (Indizes/Skillset/Indexer): 2023-11-01
+ *  - Verwaltung (Indizes/Skillset/Indexer): 2025-08-01-preview
  *  - Suche (Vektor): 2025-08-01-preview
  */
 
@@ -29,7 +29,7 @@ import { BlobServiceClient } from '@azure/storage-blob';
 // Umgebungsvariablen und Konfiguration
 const SEARCH_ENDPOINT = process.env.AZURE_SEARCH_ENDPOINT;     // z.B. https://risysuchebasis.search.windows.net
 const SEARCH_API_KEY  = process.env.AZURE_SEARCH_API_KEY;      // Admin-Key (auch für Query geeignet)
-const API_MGMT  = '2023-11-01';
+const API_MGMT  = '2025-08-01-preview';
 const API_QUERY = '2025-08-01-preview';
 
 const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
@@ -234,7 +234,8 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       { name: 'document_title',    type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
       { name: 'content_text',      type: 'Edm.String', searchable: true,  filterable: false, retrievable: true },
       { name: 'source_url',        type: 'Edm.String', searchable: false, filterable: true, retrievable: true },
-      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchProfile: 'hnsw-profile' }
+      // an das Profil gebunden, das unten einen Vectorizer nutzt
+      { name: 'content_embedding', type: 'Collection(Edm.Single)', retrievable: true, searchable: true, dimensions: embeddingDimensions, vectorSearchProfile: 'text-profile' }
     ],
     similarity: { '@odata.type': '#Microsoft.Azure.Search.BM25Similarity' },
     semantic: {
@@ -242,7 +243,6 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       configurations: [
         {
           name: 'risy-knowledge-rag-semantic',
-          // rankingOrder: 'BoostedRerankerScore', // Removed for API version 2023-11-01
           prioritizedFields: {
             titleField: { fieldName: 'document_title' },
             prioritizedContentFields: [ { fieldName: 'content_text' } ],
@@ -261,10 +261,23 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
       ],
       profiles: [
         {
-          name: 'hnsw-profile',
-          algorithm: 'hnsw-cosine'
+          name: 'text-profile',
+          algorithm: 'hnsw-cosine',
+          vectorizer: 'text-vectorizer'
         }
-      ]
+      ],
+      vectorizers: [
+        {
+          name: 'text-vectorizer',
+          kind: 'azureOpenAI',
+          azureOpenAIParameters: {
+            resourceUri: AZURE_OPENAI_ENDPOINT,
+            deploymentId: AZURE_OPENAI_EMBED_DEPLOYMENT,
+            modelName: AZURE_OPENAI_EMBED_DEPLOYMENT
+          }
+        }
+      ],
+      compressions: []
     }
   };
 
