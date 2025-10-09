@@ -49,6 +49,18 @@ const queryClient = axios.create({
   params: { 'api-version': API_QUERY }
 });
 
+// Gemeinsame Fehler-Logging-Hilfsfunktion
+function logAxiosError(err, label = 'request') {
+  const status = err?.response?.status;
+  const headers = err?.response?.headers;
+  const data = err?.response?.data;
+  const msg = err?.message || String(err);
+  console.error(`[ACS ${label}] Fehler:`, msg);
+  if (status) console.error(`[ACS ${label}] Status:`, status);
+  if (headers) console.error(`[ACS ${label}] Headers:`, headers);
+  if (data) console.error(`[ACS ${label}] Body:`, typeof data === 'object' ? JSON.stringify(data, null, 2) : data);
+}
+
 // Hilfsfunktionen
 function requireEnv(name) {
   if (!process.env[name]) {
@@ -122,7 +134,12 @@ async function ensureDataSource({ sessionId, container = BLOB_CONTAINER, prefix 
     }
   };
 
-  await mgmt.put(`/datasources/${encodeURIComponent(dataSourceName)}`, body);
+  try {
+    await mgmt.put(`/datasources/${encodeURIComponent(dataSourceName)}`, body);
+  } catch (err) {
+    logAxiosError(err, 'PUT /datasources');
+    throw err;
+  }
   return dataSourceName;
 }
 
@@ -186,7 +203,12 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
     }
   };
 
-  await mgmt.put(`/indexes/${encodeURIComponent(name)}`, definition);
+  try {
+    await mgmt.put(`/indexes/${encodeURIComponent(name)}`, definition);
+  } catch (err) {
+    logAxiosError(err, 'PUT /indexes');
+    throw err;
+  }
   return name;
 }
 
@@ -257,7 +279,12 @@ async function ensureSkillset({ sessionId, targetIndexName }) {
     }
   };
 
-  await mgmt.put(`/skillsets/${encodeURIComponent(skillsetName)}`, body);
+  try {
+    await mgmt.put(`/skillsets/${encodeURIComponent(skillsetName)}`, body);
+  } catch (err) {
+    logAxiosError(err, 'PUT /skillsets');
+    throw err;
+  }
   return skillsetName;
 }
 
@@ -293,18 +320,30 @@ async function ensureIndexer({ sessionId, targetIndexName }) {
     outputFieldMappings: []
   };
 
-  await mgmt.put(`/indexers/${encodeURIComponent(indexerName)}`, body);
+  try {
+    await mgmt.put(`/indexers/${encodeURIComponent(indexerName)}`, body);
+  } catch (err) {
+    logAxiosError(err, 'PUT /indexers');
+    throw err;
+  }
   return indexerName;
 }
 
 // Startet Indexer und wartet auf Abschluss (Polling)
 async function runIndexerAndWait({ sessionId, timeoutMs = 10 * 60 * 1000, pollMs = 3000 }) {
   const { indexerName } = resourceNames(sessionId);
-  await mgmt.post(`/indexers/${encodeURIComponent(indexerName)}/run`);
+  try { await mgmt.post(`/indexers/${encodeURIComponent(indexerName)}/run`); }
+  catch (err) { logAxiosError(err, 'POST /indexers/run'); throw err; }
 
   const start = Date.now();
   while (true) {
-    const { data } = await mgmt.get(`/indexers/${encodeURIComponent(indexerName)}/status`);
+    let data;
+    try {
+      ({ data } = await mgmt.get(`/indexers/${encodeURIComponent(indexerName)}/status`));
+    } catch (err) {
+      logAxiosError(err, 'GET /indexers/status');
+      throw err;
+    }
     const st = data?.lastResult?.status;
     if (st === 'success') return data;
     if (st === 'transientFailure' || st === 'error') {
@@ -333,7 +372,13 @@ async function vectorSearchTopK({ sessionId, indexName, text, k = 3, select = 'd
       { kind: 'text', fields: 'content_embedding', text, k }
     ]
   };
-  const { data } = await queryClient.post(`/${encodeURIComponent(effectiveIndex)}/docs/search`, body);
+  let data;
+  try {
+    ({ data } = await queryClient.post(`/${encodeURIComponent(effectiveIndex)}/docs/search`, body));
+  } catch (err) {
+    logAxiosError(err, 'POST /indexes/docs/search');
+    throw err;
+  }
   return (data.value || []).map(v => ({
     score: v['@search.score'],
     document_title: v.document_title,
