@@ -47,7 +47,7 @@ export default async function (sessionId, userName, args) {
   await getChatCompletion({
     sessionId,
     role: 'system',
-    text: 'Hm, ich brauche einen Moment, um die Dokumente zu prüfen und alles durchzusehen. Sobald ich fertig bin, bekommst du eine Excel-Datei mit den Ergebnissen 📊',
+    text: 'KEIN FUNCTION CALLING! Hm, ich brauche einen Moment, um die Dokumente zu prüfen und alles durchzusehen. Sobald ich fertig bin, bekommst du eine Excel-Datei mit den Ergebnissen ',
     userName,
     imageUrls: []
   });
