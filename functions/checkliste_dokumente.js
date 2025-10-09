@@ -1,102 +1,253 @@
-// Orchestrierung: lädt Dokumente, indexiert sie pro Sitzung, sucht Top-3 Chunks je Frage
-// und lässt OpenAI aus diesen Chunks eine Antwort + genaue Quellen-Zitat formulieren.
+import { SearchIndexClient, SearchIndexerClient, AzureKeyCredential } from '@azure/search-documents';
+import { DefaultAzureCredential } from '@azure/identity';
 
-import {
-  prepareAndIndexSession,
-  vectorSearchTopK,
-  cleanupSessionResources
-} from '../services/tempCognitiveSearch.js';
+const AZURE_SEARCH_SERVICE_ENDPOINT = process.env.AZURE_SEARCH_SERVICE_ENDPOINT;
+const AZURE_SEARCH_API_KEY = process.env.AZURE_SEARCH_API_KEY;
+const AZURE_OPENAI_ENDPOINT = process.env.AZURE_OPENAI_ENDPOINT;
+const AZURE_OPENAI_EMBED_DEPLOYMENT = process.env.AZURE_OPENAI_EMBED_DEPLOYMENT;
+const AZURE_STORAGE_CONNECTION_STRING = process.env.AZURE_STORAGE_CONNECTION_STRING;
 
-import { simpleChatCompletion, getChatCompletion } from '../services/openai.js';
+const API_MGMT  = '2025-08-01-preview';
 
-// Hilfsfunktion: baut nutzerfreundlichen Kontext aus Chunks
-function buildContextFromChunks(chunks) {
-  return chunks
-    .map((c, i) => [
-      `# Quelle ${i + 1}: ${c.document_title || 'Unbenannt'}`,
-      c.content_text || ''
-    ].join('\n'))
-    .join('\n\n---\n\n');
+const embeddingDimensions = 1536;
+
+function buildAcsName(prefix, sessionId) {
+  // Replace non-alphanumeric characters with dashes and lowercase
+  const safeSessionId = sessionId.toLowerCase().replace(/[^a-z0-9]/g, '-');
+  return `${prefix}${safeSessionId}`;
 }
 
-// System-Prompt (deutsch): klare Ausgabe als JSON mit Feldern answer, quote
-const DEFAULT_SYSTEM_PROMPT = `Du bist ein präziser Assistent für Dokumentenfragen (DE/EN).
-Antworte NUR anhand des bereitgestellten Kontexts. Wenn die Antwort nicht sicher ist, sage es explizit.
-Gib das Ergebnis **ausschließlich** als JSON im Schema {"answer":"...","quote":"..."} zurück.
-Die Eigenschaft "quote" muss eine ** ausführliche, wortgetreue** Textpassage aus dem Kontext sein.`;
-
-// Baut User-Prompt aus Frage + Kontext
-function makeUserPrompt(question, context) {
-  return [
-    `Frage: ${question}`,
-    '',
-    'Kontext:',
-    context
-  ].join('\n');
+function resourceNames(sessionId) {
+  return {
+    dataSourceName: buildAcsName('ds-', sessionId),
+    skillsetName: buildAcsName('ss-', sessionId),
+    indexName: buildAcsName('idx-', sessionId),
+    indexerName: buildAcsName('idxr-', sessionId),
+    prefix: `runs/${sessionId}/`
+  };
 }
 
-// Erwartet args: { dokumente: string[], fragen: string[] }
-export default async function (sessionId, userName, args) {
-  const dokumente = Array.isArray(args?.dokumente) ? args.dokumente : [];
-  const fragen = Array.isArray(args?.fragen) ? args.fragen : [];
+const credential = AZURE_SEARCH_API_KEY
+  ? new AzureKeyCredential(AZURE_SEARCH_API_KEY)
+  : new DefaultAzureCredential();
 
-  if (!sessionId) throw new Error('sessionId fehlt');
-  if (!dokumente.length) throw new Error('args.dokumente ist leer');
-  if (!fragen.length) throw new Error('args.fragen ist leer');
+const indexClient = new SearchIndexClient(AZURE_SEARCH_SERVICE_ENDPOINT, credential);
+const indexerClient = new SearchIndexerClient(AZURE_SEARCH_SERVICE_ENDPOINT, credential);
 
-  await getChatCompletion({
-    sessionId,
-    role: 'system',
-    text: 'KEIN FUNCTION CALLING! Hm, ich brauche einen Moment, um die Dokumente zu prüfen und alles durchzusehen. Sobald ich fertig bin, bekommst du eine Excel-Datei mit den Ergebnissen ',
-    userName,
-    imageUrls: []
-  });
+async function createOrUpdateTempIndex(sessionId) {
+  const { indexName } = resourceNames(sessionId);
+  const name = indexName;
 
-  const results = [];
-
-  // 1) Upload + Erstellen aller temporären Ressourcen + Indexierung
-  const prep = await prepareAndIndexSession({ sessionId, urls: dokumente });
+  const definition = {
+    name,
+    fields: [
+      { name: 'content_id',        type: 'Edm.String', searchable: true, filterable: false, retrievable: true, stored: true, sortable: true, facetable: false, key: true, analyzer: 'keyword', synonymMaps: [] },
+      { name: 'text_document_id',  type: 'Edm.String', searchable: false, filterable: true,  retrievable: true, stored: true, sortable: false, facetable: false, key: false, synonymMaps: [] },
+      { name: 'document_title',    type: 'Edm.String', searchable: true,  filterable: false, retrievable: true, stored: true, sortable: false, facetable: false, key: false, synonymMaps: [] },
+      { name: 'content_text',      type: 'Edm.String', searchable: true,  filterable: false, retrievable: true, stored: true, sortable: false, facetable: false, key: false, synonymMaps: [] },
+      { name: 'source_url',        type: 'Edm.String', searchable: false, filterable: true,  retrievable: true, stored: true, sortable: false, facetable: false, key: false, synonymMaps: [] },
+      { name: 'content_embedding', type: 'Collection(Edm.Single)', searchable: true, filterable: false, retrievable: true, stored: true, sortable: false, facetable: false, key: false, dimensions: embeddingDimensions, vectorSearchProfile: 'risy-knowledge-rag-text-profile', synonymMaps: [] }
+    ],
+    scoringProfiles: [],
+    suggesters: [],
+    analyzers: [],
+    normalizers: [],
+    tokenizers: [],
+    tokenFilters: [],
+    charFilters: [],
+    similarity: { '@odata.type': '#Microsoft.Azure.Search.BM25Similarity' },
+    semantic: {
+      defaultConfiguration: 'risy-knowledge-rag-semantic',
+      configurations: [
+        {
+          name: 'risy-knowledge-rag-semantic',
+          flightingOptIn: false,
+          rankingOrder: 'BoostedRerankerScore',
+          prioritizedFields: {
+            titleField: { fieldName: 'document_title' },
+            prioritizedContentFields: [ { fieldName: 'content_text' } ],
+            prioritizedKeywordsFields: []
+          }
+        }
+      ]
+    },
+    vectorSearch: {
+      algorithms: [
+        {
+          name: 'risy-knowledge-rag-hnsw',
+          kind: 'hnsw',
+          hnswParameters: { metric: 'cosine', m: 4, efConstruction: 400, efSearch: 500 }
+        }
+      ],
+      profiles: [
+        {
+          name: 'risy-knowledge-rag-text-profile',
+          algorithm: 'risy-knowledge-rag-hnsw',
+          vectorizer: 'risy-knowledge-rag-text-vectorizer'
+        }
+      ],
+      vectorizers: [
+        {
+          name: 'risy-knowledge-rag-text-vectorizer',
+          kind: 'azureOpenAI',
+          azureOpenAIParameters: {
+            resourceUri: AZURE_OPENAI_ENDPOINT,
+            deploymentId: AZURE_OPENAI_EMBED_DEPLOYMENT,
+            modelName: AZURE_OPENAI_EMBED_DEPLOYMENT
+          }
+        }
+      ],
+      compressions: []
+    }
+  };
 
   try {
-    // 2) Für jede Frage: vektorbasierte Suche -> OpenAI-Antwort
-    for (const frage of fragen) {
-      const chunks = await vectorSearchTopK({ sessionId, text: frage, k: 3 });
-      const context = buildContextFromChunks(chunks);
-
-      const userPrompt = makeUserPrompt(frage, context);
-
-      let answerText = '';
-      let quoteText = '';
-
-      const raw = await simpleChatCompletion(DEFAULT_SYSTEM_PROMPT, userPrompt);
-
-      try {
-        const parsed = JSON.parse(typeof raw === 'string' ? raw : String(raw));
-        answerText = parsed.answer || '';
-        quoteText = parsed.quote || '';
-      } catch {
-        answerText = typeof raw === 'string' ? raw : String(raw);
-        quoteText = (chunks[0]?.content_text || '').slice(0, 400);
-      }
-
-      results.push({ frage, antwort: answerText, zitat: quoteText });
-    }
-
-    console.log('\n[Endergebnisse]', results);
-    return results;
+    await indexClient.createOrUpdateIndex(definition);
   } catch (error) {
-    console.error('Fehler im Dokumenten-Workflow:', error);
-    await getChatCompletion({
-      sessionId,
-      role: 'system',
-      text: `Hoppla, beim Verarbeiten der Dokumente ist ein Fehler aufgetreten: ${error.message || error}`,
-      userName,
-      imageUrls: []
-    });
+    console.error('Error creating or updating index:', error);
     throw error;
-  } finally {
-    // 3) Aufräumen: Indexer, Index, DataSource, Blobs löschen
-    await cleanupSessionResources({ sessionId, deleteIndex: true, deleteDataSource: true, deleteBlobs: true })
-      .catch(() => {});
   }
+}
+
+async function ensureSkillset(sessionId) {
+  const { skillsetName, indexName: targetIndexName } = resourceNames(sessionId);
+
+  const body = {
+    name: skillsetName,
+    description: 'Stable text-only pipeline: Split -> Chunk -> Embeddings (uses /document/content from indexer)',
+    skills: [
+      {
+        '@odata.type': '#Microsoft.Skills.Text.SplitSkill',
+        name: 'split-to-pages',
+        description: 'Split full document text into pages',
+        context: '/document',
+        defaultLanguageCode: 'de',
+        textSplitMode: 'pages',
+        maximumPageLength: 6000,
+        pageOverlapLength: 0,
+        maximumPagesToTake: 0,
+        unit: 'characters',
+        inputs: [ { name: 'text', source: '/document/content', inputs: [] } ],
+        outputs: [ { name: 'textItems', targetName: 'pages' } ]
+      },
+      {
+        '@odata.type': '#Microsoft.Skills.Text.SplitSkill',
+        name: 'split-pages-to-chunks',
+        description: 'Chunk pages into overlapping segments',
+        context: '/document/pages/*',
+        defaultLanguageCode: 'de',
+        textSplitMode: 'pages',
+        maximumPageLength: 2000,
+        pageOverlapLength: 200,
+        maximumPagesToTake: 100000,
+        unit: 'characters',
+        inputs: [ { name: 'text', source: '/document/pages/*', inputs: [] } ],
+        outputs: [ { name: 'textItems', targetName: 'chunks' } ]
+      },
+      {
+        '@odata.type': '#Microsoft.Skills.Text.AzureOpenAIEmbeddingSkill',
+        name: 'embed-chunks',
+        description: 'Compute embeddings for each chunk',
+        context: '/document/pages/*/chunks/*',
+        resourceUri: AZURE_OPENAI_ENDPOINT,
+        deploymentId: AZURE_OPENAI_EMBED_DEPLOYMENT,
+        dimensions: 1536,
+        modelName: AZURE_OPENAI_EMBED_DEPLOYMENT,
+        inputs: [ { name: 'text', source: '/document/pages/*/chunks/*', inputs: [] } ],
+        outputs: [ { name: 'embedding', targetName: 'chunk_vector' } ]
+      }
+    ],
+    indexProjections: {
+      selectors: [
+        {
+          targetIndexName,
+          parentKeyFieldName: 'text_document_id',
+          sourceContext: '/document/pages/*/chunks/*',
+          mappings: [
+            { name: 'content_text',      source: '/document/pages/*/chunks/*', inputs: [] },
+            { name: 'content_embedding', source: '/document/pages/*/chunks/*/chunk_vector', inputs: [] },
+            { name: 'document_title',    source: '/document/document_title', inputs: [] },
+            { name: 'source_url',        source: '/document/metadata_storage_path', inputs: [] }
+          ]
+        }
+      ],
+      parameters: { projectionMode: 'skipIndexingParentDocuments' }
+    }
+  };
+
+  try {
+    await indexerClient.createOrUpdateSkillset(body);
+  } catch (error) {
+    console.error('Error creating or updating skillset:', error);
+    throw error;
+  }
+}
+
+async function ensureDataSource(sessionId) {
+  const { dataSourceName, prefix } = resourceNames(sessionId);
+
+  const body = {
+    name: dataSourceName,
+    description: 'Data source for temporary chat session documents',
+    type: 'azureblob',
+    credentials: { connectionString: AZURE_STORAGE_CONNECTION_STRING },
+    container: { name: 'chat-temp-docs', query: prefix },
+    dataDeletionDetectionPolicy: { '@odata.type': '#Microsoft.Azure.Search.NativeBlobSoftDeleteDeletionDetectionPolicy' }
+  };
+
+  try {
+    // Try to create or update data source
+    await indexerClient.createOrUpdateDataSourceConnection(body);
+  } catch (error) {
+    console.error('Error creating or updating data source:', error);
+    throw error;
+  }
+}
+
+async function ensureIndexer(sessionId) {
+  const { indexerName, dataSourceName, skillsetName, indexName: targetIndexName } = resourceNames(sessionId);
+
+  const body = {
+    name: indexerName,
+    description: null,
+    dataSourceName,
+    skillsetName,
+    targetIndexName,
+    disabled: false,
+    schedule: null,
+    parameters: {
+      batchSize: 1,
+      maxFailedItems: -1,
+      maxFailedItemsPerBatch: 0,
+      configuration: {
+        allowSkillsetToReadFileData: true,
+        dataToExtract: 'contentAndMetadata',
+        parsingMode: 'default',
+        failOnUnsupportedContentType: false,
+        indexStorageMetadataOnlyForOversizedDocuments: true,
+        failOnUnprocessableDocument: false
+      }
+    },
+    fieldMappings: [
+      { sourceFieldName: 'metadata_storage_name', targetFieldName: 'document_title' },
+      { sourceFieldName: 'metadata_storage_path', targetFieldName: 'source_url' },
+      { sourceFieldName: 'metadata_storage_path', targetFieldName: 'text_document_id', mappingFunction: { name: 'base64Encode' } }
+    ],
+    outputFieldMappings: []
+  };
+
+  try {
+    await indexerClient.createOrUpdateIndexer(body);
+  } catch (error) {
+    console.error('Error creating or updating indexer:', error);
+    throw error;
+  }
+}
+
+export {
+  createOrUpdateTempIndex,
+  ensureSkillset,
+  ensureDataSource,
+  ensureIndexer,
+  resourceNames
 };
