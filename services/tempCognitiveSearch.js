@@ -122,6 +122,27 @@ function resourceNames(sessionId) {
 
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
+// Helper: Prüft, ob die URL vermutlich ein Blob-SAS-Link ist
+function isLikelyBlobSas(url) {
+  try {
+    const u = new URL(url);
+    return /\.blob\.core\./.test(u.host) && u.searchParams.has('se');
+  } catch { return false; }
+}
+
+// Helper: Fügt SharePoint/OneDrive ggf. Download-Hinweis hinzu
+function withSharePointDownloadHint(url) {
+  try {
+    const u = new URL(url);
+    // Wenn kein Query dran ist, versuche ?download=1 (häufig bei SharePoint/OneDrive)
+    if (!u.search) {
+      u.search = '?download=1';
+      return u.toString();
+    }
+    return url;
+  } catch { return url; }
+}
+
 // Lädt Dateien in Blob Storage hoch (pro Sitzung)
 async function uploadSessionBlobsFromUrls({ sessionId, urls, container = BLOB_CONTAINER, prefix }) {
   requireEnv('AZURE_STORAGE_CONNECTION_STRING');
@@ -133,20 +154,36 @@ async function uploadSessionBlobsFromUrls({ sessionId, urls, container = BLOB_CO
   const folder = prefix || resourceNames(sessionId).prefix;
   const results = [];
 
+  const failures = [];
   for (const url of urls) {
     const fileName = (url.split('?')[0].split('/').pop() || `file-${Date.now()}`);
     const blobName = `${folder}${fileName}`;
     const block = cont.getBlockBlobClient(blobName);
 
-    if (url.startsWith('https://') && url.includes('.blob.core.') && url.includes('?')) {
-      // Serverseitiges Kopieren per SAS
-      await block.beginCopyFromURL(url);
-    } else {
-      const resp = await axios.get(url, { responseType: 'arraybuffer' });
-      const contentType = resp.headers['content-type'] || 'application/octet-stream';
-      await block.uploadData(resp.data, { blobHTTPHeaders: { blobContentType: contentType } });
+    try {
+      if (isLikelyBlobSas(url)) {
+        // Serverseitiges Kopieren per SAS (schnell, ohne Download)
+        await block.beginCopyFromURL(url);
+      } else {
+        // Direkter Download (öffentlich) – ggf. SharePoint-Download-Hinweis anhängen
+        let directUrl = url;
+        if (/sharepoint\.com|onedrive\.live\.com|teams\.microsoft\.com/i.test(url)) {
+          directUrl = withSharePointDownloadHint(url);
+        }
+        const resp = await axios.get(directUrl, { responseType: 'arraybuffer', timeout: 30000, validateStatus: s => s >= 200 && s < 400 });
+        const contentType = resp.headers['content-type'] || 'application/octet-stream';
+        await block.uploadData(resp.data, { blobHTTPHeaders: { blobContentType: contentType } });
+      }
+      results.push({ url, blobPath: `${container}/${blobName}` });
+    } catch (e) {
+      console.warn('[uploadSessionBlobsFromUrls] skip URL due to error:', url, e?.message || e);
+      failures.push({ url, error: e?.response?.status || e?.message || String(e) });
     }
-    results.push({ url, blobPath: `${container}/${blobName}` });
+  }
+
+  if (results.length === 0) {
+    const msg = `Keiner der übergebenen Links konnte geladen werden (z.B. 404/403). Übergib bitte öffentlich erreichbare URLs oder Blob-SAS-Links. Details: ${JSON.stringify(failures)}`;
+    throw new Error(msg);
   }
 
   return { container, prefix: folder, items: results };
