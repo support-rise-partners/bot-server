@@ -1,13 +1,13 @@
 // Orchestrierung: lädt Dokumente, indexiert sie pro Sitzung, sucht Top-3 Chunks je Frage
 // und lässt OpenAI aus diesen Chunks eine Antwort + genaue Quellen-Zitat formulieren.
 
-const {
+import {
   prepareAndIndexSession,
   vectorSearchTopK,
   cleanupSessionResources
-} = require('../services/tempCognitiveSearch');
+} from '../services/tempCognitiveSearch.js';
 
-const { simpleChatCompletion, getChatCompletion } = require('../services/openai');
+import { simpleChatCompletion, getChatCompletion } from '../services/openai.js';
 
 // Hilfsfunktion: baut nutzerfreundlichen Kontext aus Chunks
 function buildContextFromChunks(chunks) {
@@ -36,7 +36,7 @@ function makeUserPrompt(question, context) {
 }
 
 // Erwartet args: { dokumente: string[], fragen: string[] }
-exports.default = async function (sessionId, userName, args) {
+export default async function (sessionId, userName, args) {
   const dokumente = Array.isArray(args?.dokumente) ? args.dokumente : [];
   const fragen = Array.isArray(args?.fragen) ? args.fragen : [];
 

@@ -22,8 +22,8 @@
  *  - Suche (Vektor): 2025-08-01-preview
  */
 
-const axios = require('axios');
-const { BlobServiceClient } = require('@azure/storage-blob');
+import axios from 'axios';
+import { BlobServiceClient } from '@azure/storage-blob';
 
 // Umgebungsvariablen und Konfiguration
 const SEARCH_ENDPOINT = process.env.AZURE_SEARCH_ENDPOINT;     // z.B. https://risysuchebasis.search.windows.net
@@ -406,8 +406,7 @@ async function prepareAndIndexSession({ sessionId, urls, container = BLOB_CONTAI
   return { ...names };
 }
 
-module.exports = {
-  // Einzelschritte
+export {
   uploadSessionBlobsFromUrls,
   ensureDataSource,
   createOrUpdateTempIndex,
@@ -416,6 +415,5 @@ module.exports = {
   runIndexerAndWait,
   vectorSearchTopK,
   cleanupSessionResources,
-  // Komfortabler Orchestrator
   prepareAndIndexSession
 };
