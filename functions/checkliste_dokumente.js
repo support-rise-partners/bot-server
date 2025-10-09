@@ -1,6 +1,4 @@
-// functions/checkliste_dokumente.js (ESM, финальная версия)
-// Оркестрация: принимает ссылки и вопросы → готовит временные ресурсы ACS → векторный поиск → LLM-ответ → уборка.
-// Все операции хранилища/поиска импортируются из services/tempCognitiveSearch.js.
+// functions/checkliste_dokumente.js (ESM, финальная версия, фикс парсинга args и дефолтного ответа)
 
 import {
   prepareAndIndexSession,
@@ -8,13 +6,26 @@ import {
   cleanupSessionResources
 } from '../services/tempCognitiveSearch.js';
 
-// Параметры для LLM-ответа (ваш существующий чат-деплоймент)
 const OPENAI_ENDPOINT   = (process.env.OPENAI_ENDPOINT || '').trim();
 const OPENAI_KEY        = (process.env.OPENAI_KEY || '').trim();
 const OPENAI_DEPLOYMENT = (process.env.OPENAI_DEPLOYMENT || 'gpt-4o').trim();
 const OPENAI_VERSION    = (process.env.OPENAI_VERSION || '2024-12-01-preview').trim();
 
-// Мини-обёртка для Chat Completion (без логики поиска/хранилища)
+// --- НОВОЕ: нормализация аргументов из function calling (строка JSON или объект)
+function normalizeArgs(raw) {
+  let a = raw;
+  if (typeof raw === 'string') {
+    try { a = JSON.parse(raw); } catch {
+      return { dokumente: [], fragen: [], _error: 'Ungültiges JSON in args (String konnte nicht geparst werden).' };
+    }
+  }
+  a = a && typeof a === 'object' ? a : {};
+  const dokumente = Array.isArray(a.dokumente) ? a.dokumente.filter(Boolean) : [];
+  const fragen    = Array.isArray(a.fragen)    ? a.fragen.filter(Boolean)    : [];
+  return { dokumente, fragen };
+}
+
+// Мини-обёртка для Chat Completion
 async function simpleChatCompletion(systemPromptText, userPromptText) {
   if (!OPENAI_ENDPOINT || !OPENAI_KEY) {
     throw new Error('OPENAI_ENDPOINT/OPENAI_KEY sind nicht gesetzt.');
@@ -40,7 +51,6 @@ async function simpleChatCompletion(systemPromptText, userPromptText) {
   return data?.choices?.[0]?.message?.content || '';
 }
 
-// Безопасный парсер JSON
 function parseJsonSafe(raw) {
   const s = typeof raw === 'string' ? raw.trim() : String(raw || '');
   const fenced = s.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
@@ -53,30 +63,42 @@ function parseJsonSafe(raw) {
 /**
  * Default-экспорт для function calling:
  *   export default async function (sessionId, userName, args)
- * args = { dokumente: string[], fragen: string[] }
+ * args: { dokumente: string[], fragen: string[] } ИЛИ JSON-строка с такими полями
  */
 export default async function checkliste_dokumente(sessionId, userName, args = {}) {
-  const dokumente = Array.isArray(args?.dokumente) ? args.dokumente : [];
-  const fragen    = Array.isArray(args?.fragen) ? args.fragen : [];
+  // --- НОВОЕ: корректная распаковка аргументов
+  const { dokumente, fragen, _error } = normalizeArgs(args);
 
-  // Если нет документов — возвращаем пустой массив и печатаем его
+  // Если парсинг провалился — вернём осмысленный результат, а не пустоту
+  if (_error) {
+    const results = [{ frage: null, antwort: 'Fehler beim Verarbeiten der Eingabe.', zitat: _error }];
+    console.log(results);
+    return results;
+  }
+
+  // Нет документов — сразу возвращаем понятный ответ (не пустой)
   if (!dokumente.length) {
-    const results = [];
+    const results = [{ frage: null, antwort: 'Keine Dokumente übermittelt.', zitat: '' }];
     console.log(results);
     return results;
   }
 
   const results = [];
   try {
-    // 1) Подготовить сессию: загрузить документы в Blob и создать временные ресурсы ACS, выполнить индексацию
+    // 1) Подготовка и индексация
     await prepareAndIndexSession({ sessionId, urls: dokumente });
 
-    // 2) Для каждого вопроса: векторный поиск → формирование ответа моделью
+    // 2) Ответы по вопросам
     const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Antworte als JSON {"answer": string, "quote": string}.';
 
     for (const frage of fragen) {
-      // Векторный поиск топ-3 релевантных чанка
-      const chunks = await vectorSearchTopK({ sessionId, text: frage, k: 3 });
+      const trimmed = (frage || '').toString().trim();
+      if (!trimmed) {
+        results.push({ frage, antwort: 'Leere Frage.', zitat: '' });
+        continue;
+      }
+
+      const chunks = await vectorSearchTopK({ sessionId, text: trimmed, k: 3 });
       if (!chunks.length) {
         results.push({ frage, antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
         continue;
@@ -86,7 +108,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         .map((c, i) => `# Chunk ${i + 1} — ${c.document_title}\n${c.content_text}`)
         .join('\n\n');
 
-      const USER = `Frage: ${frage}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort als JSON.`;
+      const USER = `Frage: ${trimmed}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort als JSON.`;
 
       let raw = '';
       try {
@@ -107,10 +129,12 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       results.push({ frage, antwort, zitat });
     }
   } catch (err) {
-    // Логируем ошибку пайплайна (в консоль выводим только финальный results; здесь — error)
-    console.error('[checkliste_dokumente] Pipeline-Fehler:', err?.message || err);
+    // --- НОВОЕ: не оставляем пустой массив — кладём понятный объект с ошибкой
+    const msg = err?.message || String(err);
+    console.error('[checkliste_dokumente] Pipeline-Fehler:', msg);
+    results.push({ frage: null, antwort: 'Interner Fehler im Verarbeitungspipeline.', zitat: msg });
   } finally {
-    // 3) Обязательная уборка временных ресурсов (Index/Indexer/Skillset/DataSource + Blobs runs/<sessionId>/)
+    // 3) Уборка временных ресурсов
     try {
       await cleanupSessionResources({ sessionId, deleteIndex: true, deleteDataSource: true, deleteBlobs: true });
     } catch (e) {
@@ -118,7 +142,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
     }
   }
 
-  // Печатаем ТОЛЬКО массив результатов
+  // В консоль выводим именно массив результатов (не пустую строку)
   console.log(results);
   return results;
 }

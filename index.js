@@ -10,8 +10,6 @@ import { MyBot } from './bot/bot.js';
 import notifyUser from './functions/notify_user.js';
 import { startExternalWeeklyScheduler } from './services/blobExportService/sitesExport.js';
 
-console.log('AZURE_OPENAI_ENDPOINT =', process.env.AZURE_OPENAI_ENDPOINT);
-
 const app = express().use(express.json());
 app.use(express.static(__dirname + '/public'));
 app.use('/tmp', express.static(__dirname + '/tmp_attachments'));

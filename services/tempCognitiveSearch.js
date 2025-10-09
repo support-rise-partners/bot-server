@@ -273,7 +273,7 @@ async function createOrUpdateTempIndex({ sessionId, indexName, embeddingDimensio
           name: 'text-vectorizer',
           kind: 'azureOpenAI',
           azureOpenAIParameters: {
-            uri: AZURE_OPENAI_ENDPOINT,
+            resourceUri: AZURE_OPENAI_ENDPOINT,
             deploymentId: AZURE_OPENAI_EMBED_DEPLOYMENT,
             modelName: AZURE_OPENAI_EMBED_DEPLOYMENT
           }
