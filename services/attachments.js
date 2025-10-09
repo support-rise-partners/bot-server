@@ -12,6 +12,27 @@ if (!SERVER_HOST) {
     console.warn('⚠️ SERVER_HOST is not set. Public URLs for attachments may be invalid.');
 }
 
+const ALLOWED_MIME = new Set([
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.microsoft.teams.file.download.info',
+    'image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp'
+]);
+
+function shouldProcessAttachment(att) {
+    const ct = (att?.contentType || '').toLowerCase();
+    if (!ct) return false;
+    if (ct.startsWith('image/')) return true;
+    if (ALLOWED_MIME.has(ct)) return true;
+    // Teams schickt manchmal text/html, Karten etc. – die ignorieren wir still
+    if (ct.startsWith('text/html')) return false;
+    if (ct.startsWith('application/vnd.microsoft.card')) return false;
+    return false;
+}
+
 function cleanUpOldFiles() {
     if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
     const now = Date.now();
@@ -98,10 +119,15 @@ export async function extractImagesFromContext(context) {
     const imageUrls = [];
 
     for (const attachment of attachments) {
+        const ct = (attachment.contentType || '').toLowerCase();
+        if (!shouldProcessAttachment(attachment)) {
+            // Ignoriere nicht-Datei-Anhänge wie text/html, Karten etc.
+            continue;
+        }
+
         let fileBuffer = null;
         let extension = '';
         const name = attachment.name || '';
-        const ct = (attachment.contentType || '').toLowerCase();
 
         // 1) Скачиваем бинарь (с приоритетом на прямую загрузку)
         try {
