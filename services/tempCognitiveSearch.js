@@ -22,6 +22,7 @@
  *  - Suche (Vektor): 2025-08-01-preview
  */
 
+import crypto from 'crypto';
 import axios from 'axios';
 import { BlobServiceClient } from '@azure/storage-blob';
 
@@ -68,14 +69,42 @@ function requireEnv(name) {
   }
 }
 
+// Sanitizer für Azure Cognitive Search Ressourcennamen (Session-IDs)
+function sanitizeForAcsName(input) {
+  const raw = String(input || '').toLowerCase();
+  // Ersetze alle Nicht-[a-z0-9-] durch '-'
+  let s = raw.replace(/[^a-z0-9-]+/g, '-');
+  // Doppelte Bindestriche zusammenfassen
+  s = s.replace(/-+/g, '-');
+  // Trim führende/abschließende '-'
+  s = s.replace(/^-+/, '').replace(/-+$/, '');
+  if (!s) s = 's';
+  // Hash-Suffix zur Kollisionsvermeidung
+  const hash = crypto.createHash('sha1').update(raw).digest('hex').slice(0, 8);
+  // Grundname plus Hash, getrennt mit '-'
+  let name = `${s}-${hash}`;
+  // Max. 128 Zeichen
+  if (name.length > 128) {
+    // Kürze Grundname, sodass insgesamt 128 bleibt
+    const keep = 128 - (hash.length + 1);
+    name = `${s.slice(0, Math.max(1, keep))}-${hash}`;
+    name = name.replace(/-+$/, '');
+  }
+  // Sicherheits-Trim, falls nach Kürzung '-' vorn/hinten entstanden
+  name = name.replace(/^-+/, '').replace(/-+$/, '');
+  // Leere Namen vermeiden
+  if (!name) name = hash;
+  return name;
+}
+
 function resourceNames(sessionId) {
-  const idx = `idx-${sessionId}`;
+  const sid = sanitizeForAcsName(sessionId);
   return {
-    dataSourceName: `ds-${sessionId}`,
-    skillsetName: `ss-${sessionId}`,      // temporäres Skillset pro Sitzung
-    indexName: idx,                        // temporärer Index pro Sitzung
-    indexerName: `idxr-${sessionId}`,      // temporärer Indexer pro Sitzung
-    prefix: `runs/${sessionId}/`
+    dataSourceName: `ds-${sid}`,
+    skillsetName: `ss-${sid}`,
+    indexName: `idx-${sid}`,
+    indexerName: `idxr-${sid}`,
+    prefix: `runs/${sessionId}/` // Präfix im Blob darf original bleiben
   };
 }
 
