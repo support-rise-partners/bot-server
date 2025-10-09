@@ -33,18 +33,48 @@ function shouldProcessAttachment(att) {
     return false;
 }
 
-function cleanUpOldFiles() {
-    if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR);
+function safeStat(p) {
+    try { return fs.statSync(p); }
+    catch (e) { if (e && e.code === 'ENOENT') return null; throw e; }
+}
+
+function safeUnlink(p) {
+    try { fs.unlinkSync(p); }
+    catch (e) { if (!(e && e.code === 'ENOENT')) throw e; }
+}
+
+function cleanUpOldFiles({ maxAgeMinutes = FILE_LIFETIME_MINUTES } = {}) {
+    try { if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
     const now = Date.now();
+    let removed = 0;
     for (const file of fs.readdirSync(TEMP_DIR)) {
         const filePath = path.join(TEMP_DIR, file);
-        const stats = fs.statSync(filePath);
-        const ageMinutes = (now - stats.mtimeMs) / 60000;
-        if (ageMinutes > FILE_LIFETIME_MINUTES) {
-            try { fs.unlinkSync(filePath); } catch {}
-            try { fs.unlinkSync(`${filePath}.json`); } catch {}
+        const st = safeStat(filePath);
+        if (!st || !st.isFile()) continue;
+        const ageMinutes = (now - st.mtimeMs) / 60000;
+        if (ageMinutes > maxAgeMinutes) {
+            safeUnlink(filePath);
+            const sidecar = `${filePath}.json`;
+            if (safeStat(sidecar)) safeUnlink(sidecar);
+            removed++;
         }
     }
+    return removed;
+}
+
+let __attachmentsCleanupTimer = null;
+
+export function startAttachmentsHousekeeping({ intervalMinutes = 5, maxAgeMinutes = FILE_LIFETIME_MINUTES } = {}) {
+    if (__attachmentsCleanupTimer) return; // bereits aktiv
+    try { if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true }); } catch {}
+    __attachmentsCleanupTimer = setInterval(() => {
+        try {
+            const removed = cleanUpOldFiles({ maxAgeMinutes });
+            // Optional: console.debug(`[attachments] cleanup removed ${removed} files`);
+        } catch (e) {
+            console.warn('[attachments] cleanup error:', e?.message || e);
+        }
+    }, Math.max(1, intervalMinutes) * 60 * 1000);
 }
 
 function saveFileToTmp(buffer, { extension = 'bin', originalName = '', contentType = '' } = {}) {
@@ -114,8 +144,6 @@ export async function extractImagesFromContext(context) {
     const attachments = context.activity?.attachments || [];
     if (!attachments.length) return { imageUrls: [], fileNotices: [] };
 
-    cleanUpOldFiles();
-
     const imageUrls = [];
 
     for (const attachment of attachments) {
@@ -166,4 +194,11 @@ export async function extractImagesFromContext(context) {
     }
 
     return { imageUrls, fileNotices };
+}
+
+if (!globalThis.__attachmentsCleanupStarted) {
+    try {
+        startAttachmentsHousekeeping({ intervalMinutes: 5, maxAgeMinutes: FILE_LIFETIME_MINUTES });
+        globalThis.__attachmentsCleanupStarted = true;
+    } catch {}
 }
