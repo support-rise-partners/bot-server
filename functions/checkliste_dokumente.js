@@ -1,4 +1,5 @@
-import { SearchIndexClient, SearchIndexerClient, AzureKeyCredential } from '@azure/search-documents';
+import { SearchIndexClient, SearchIndexerClient, SearchClient, AzureKeyCredential } from '@azure/search-documents';
+import { BlobServiceClient } from '@azure/storage-blob';
 import { DefaultAzureCredential } from '@azure/identity';
 
 // Werte aus .env (exakt wie in deiner Umgebung benannt)
@@ -7,6 +8,11 @@ const AZURE_SEARCH_API_KEY = (process.env.AZURE_SEARCH_API_KEY || '').trim();
 const AZURE_OPENAI_ENDPOINT = (process.env.AZURE_OPENAI_ENDPOINT || '').trim();
 const AZURE_OPENAI_EMBED_DEPLOYMENT = (process.env.AZURE_OPENAI_EMBED_DEPLOYMENT || '').trim();
 const AZURE_STORAGE_CONNECTION_STRING = (process.env.AZURE_STORAGE_CONNECTION_STRING || '').trim();
+
+const OPENAI_ENDPOINT   = (process.env.OPENAI_ENDPOINT || '').trim();
+const OPENAI_KEY        = (process.env.OPENAI_KEY || '').trim();
+const OPENAI_DEPLOYMENT = (process.env.OPENAI_DEPLOYMENT || 'gpt-4o').trim();
+const OPENAI_VERSION    = (process.env.OPENAI_VERSION || '2024-12-01-preview').trim();
 
 function ensureHttpsEndpoint(url, varName) {
   if (!url) throw new Error(`Env-Variable ${varName} ist nicht gesetzt`);
@@ -19,6 +25,17 @@ const SEARCH_ENDPOINT = ensureHttpsEndpoint(AZURE_SEARCH_ENDPOINT, 'AZURE_SEARCH
 const API_MGMT  = '2025-08-01-preview';
 
 const embeddingDimensions = 1536;
+
+const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+
+function parseJsonSafe(raw) {
+  const s = typeof raw === 'string' ? raw.trim() : String(raw || '');
+  const fenced = s.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
+  try { return JSON.parse(fenced); } catch {}
+  const m = s.match(/\{[\s\S]*\}$/);
+  if (m) { try { return JSON.parse(m[0]); } catch {} }
+  return null;
+}
 
 function buildAcsName(prefix, sessionId) {
   // Replace non-alphanumeric characters with dashes and lowercase
@@ -34,6 +51,27 @@ function resourceNames(sessionId) {
     indexerName: buildAcsName('idxr-', sessionId),
     prefix: `runs/${sessionId}/`
   };
+}
+
+async function uploadSessionBlobsFromUrls(sessionId, urls) {
+  if (!AZURE_STORAGE_CONNECTION_STRING) throw new Error('AZURE_STORAGE_CONNECTION_STRING ist nicht gesetzt');
+  const { prefix } = resourceNames(sessionId);
+  const blobService = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
+  const container = blobService.getContainerClient('chat-temp-docs');
+  await container.createIfNotExists();
+  const uploaded = [];
+  let i = 0;
+  for (const url of urls || []) {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Download fehlgeschlagen: ${url} -> ${res.status}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    const ext = (/\.\w{2,5}(?:$|\?)/.exec(url) || [''])[0].split('?')[0] || '';
+    const blobName = `${prefix}${String(++i).padStart(3,'0')}${ext || ''}`;
+    const blockBlob = container.getBlockBlobClient(blobName);
+    await blockBlob.uploadData(buf, { blobHTTPHeaders: { blobContentType: res.headers.get('content-type') || undefined } });
+    uploaded.push(blobName);
+  }
+  return { container: 'chat-temp-docs', uploaded, prefix };
 }
 
 const credential = AZURE_SEARCH_API_KEY
@@ -253,10 +291,112 @@ async function ensureIndexer(sessionId) {
   }
 }
 
+async function runIndexerAndWait(sessionId, { timeoutMs = 300000, pollMs = 2000 } = {}) {
+  const { indexerName } = resourceNames(sessionId);
+  await indexerClient.runIndexer(indexerName);
+  const started = Date.now();
+  for (;;) {
+    const status = await indexerClient.getIndexerStatus(indexerName);
+    const last = status?.lastResult;
+    if (last?.status === 'success') return last;
+    if (last?.status === 'transientFailure' || last?.status === 'error') {
+      throw new Error(`Indexer-Fehler: ${last?.errorMessage || 'unbekannt'}`);
+    }
+    if (Date.now() - started > timeoutMs) throw new Error('Indexer timeout');
+    await delay(pollMs);
+  }
+}
+
+async function vectorSearchTopK(sessionId, { text, k = 3, select = ['document_title','content_text'] }) {
+  const { indexName } = resourceNames(sessionId);
+  const searchClient = new SearchClient(SEARCH_ENDPOINT, indexName, credential);
+  const results = [];
+  const iter = searchClient.search('', {
+    top: k,
+    select,
+    vectorQueries: [{ kind: 'text', fields: 'content_embedding', text, k }]
+  });
+  for await (const r of iter.results) {
+    results.push(r.document);
+  }
+  return results;
+}
+
+async function simpleChatCompletion(systemPromptText, userPromptText) {
+  if (!AZURE_OPENAI_ENDPOINT || !AZURE_OPENAI_EMBED_DEPLOYMENT) {
+    // Если нет эмбеддингового деплоймента — используем обычный чат по OPENAI_* (как у тебя в .env)
+    if (!OPENAI_ENDPOINT || !OPENAI_KEY) throw new Error('OPENAI_ENDPOINT/OPENAI_KEY nicht gesetzt');
+    const url = `${OPENAI_ENDPOINT}/openai/deployments/${OPENAI_DEPLOYMENT}/chat/completions?api-version=${OPENAI_VERSION}`;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-key': OPENAI_KEY },
+      body: JSON.stringify({
+        messages: [ { role: 'system', content: systemPromptText }, { role: 'user', content: userPromptText } ],
+        temperature: 0.1,
+        response_format: { type: 'json_object' }
+      })
+    });
+    if (!resp.ok) throw new Error(`OpenAI Chat Fehler: ${resp.status}`);
+    const data = await resp.json();
+    return data?.choices?.[0]?.message?.content || '';
+  }
+  // Фоллбек: если хотите, можно здесь поддержать другой Azure OpenAI чат-деплоймент
+  throw new Error('Bitte konfiguriere OPENAI_* für Chat Completion.');
+}
+
+export default async function checkliste_dokumente(sessionId, userName, args = {}) {
+  const dokumente = Array.isArray(args?.dokumente) ? args.dokumente : [];
+  const fragen    = Array.isArray(args?.fragen) ? args.fragen : [];
+
+  if (!dokumente.length) {
+    const msg = 'Keine Dokumente übermittelt — bitte hänge PDF/DOCX-Links an.';
+    console.log([]);
+    return [];
+  }
+
+  // 1) Upload in Blob unter runs/<sessionId>/
+  await uploadSessionBlobsFromUrls(sessionId, dokumente);
+
+  // 2) Temporäre Ressourcen anlegen (DataSource -> Index -> Skillset -> Indexer)
+  await ensureDataSource(sessionId);
+  await createOrUpdateTempIndex(sessionId);
+  await ensureSkillset(sessionId);
+  await ensureIndexer(sessionId);
+
+  // 3) Indexer starten und auf Abschluss warten
+  await runIndexerAndWait(sessionId, { timeoutMs: 300000, pollMs: 2000 });
+
+  // 4) Для каждой Frage: векторный поиск -> чат-форматирование
+  const results = [];
+  const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Antworte als JSON {"answer": string, "quote": string}.';
+
+  for (const frage of fragen) {
+    const chunks = await vectorSearchTopK(sessionId, { text: frage, k: 3 });
+    if (!chunks.length) {
+      results.push({ frage, antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
+      continue;
+    }
+    const context = chunks.map((c, i) => `# Chunk ${i+1} — ${c.document_title}\n${c.content_text}`).join('\n\n');
+    const USER = `Frage: ${frage}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort als JSON.`;
+    const raw = await simpleChatCompletion(SYSTEM, USER);
+    const parsed = parseJsonSafe(raw);
+    const antwort = parsed?.answer || (typeof raw === 'string' ? raw : '');
+    const zitat   = parsed?.quote  || (chunks[0]?.content_text || '').slice(0, 600);
+    results.push({ frage, antwort, zitat });
+  }
+
+  // 5) Вывод в консоль ТОЛЬКО массива результатов
+  console.log(results);
+  return results;
+}
+
 export {
   createOrUpdateTempIndex,
   ensureSkillset,
   ensureDataSource,
   ensureIndexer,
-  resourceNames
+  resourceNames,
+  uploadSessionBlobsFromUrls,
+  runIndexerAndWait,
+  vectorSearchTopK
 };
