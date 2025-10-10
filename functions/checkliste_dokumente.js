@@ -67,20 +67,16 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       const refResult = await getReferenceByEmail(email);
       const conversationReference = resolveConversationReference(refResult);
       if (adapter && conversationReference) {
-        (async () => {
-          try {
-            await adapter.continueConversation(conversationReference, async (turnContext) => {
-              const response = await simpleChatCompletion(
-                'System: Du bist Risy – der freundliche Assistent. Umformuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
-                'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (leicht umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
-              );
-              const replyText = typeof response === 'string' ? response : response?.reply;
-              if (replyText && replyText.trim()) {
-                await turnContext.sendActivity({ type: 'message', text: replyText });
-              }
-            });
-          } catch {}
-        })();
+        await adapter.continueConversation(conversationReference, async (turnContext) => {
+          const response = await simpleChatCompletion(
+            'System: Du bist Risy – der freundliche Assistent. Umformuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
+            'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (leicht umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
+          );
+          const replyText = typeof response === 'string' ? response : response?.reply;
+          if (replyText && replyText.trim()) {
+            await turnContext.sendActivity({ type: 'message', text: replyText });
+          }
+        });
       }
     }
   } catch {}
