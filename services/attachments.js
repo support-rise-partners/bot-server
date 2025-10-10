@@ -101,8 +101,15 @@ function saveFileToTmp(buffer, { extension = 'bin', originalName = '', contentTy
     // 2) Decide kind (image/doc)
     let targetKind = kind;
     if (targetKind === 'auto') {
-        const isImg = (contentType || '').toLowerCase().startsWith('image/') || isImageByExt(safeExt);
-        targetKind = isImg ? 'image' : 'doc';
+        const ctLower = (contentType || '').toLowerCase();
+        let looksImage = ctLower.startsWith('image/') || isImageByExt(safeExt);
+        try {
+            if (!looksImage && buffer && buffer.length) {
+                const sig = extFromBufferSig(buffer);
+                if (['png','jpg','jpeg','gif','bmp','webp'].includes(sig)) looksImage = true;
+            }
+        } catch {}
+        targetKind = looksImage ? 'image' : 'doc';
     }
 
     const dir = targetKind === 'image' ? IMAGES_DIR : DOCS_DIR;
@@ -287,8 +294,18 @@ export async function extractImagesFromContext(context) {
         // Final fallback: assume PNG (most common for screenshots) instead of BIN
         extension = (byCt || byTeams || byName || byUrl || bySig || 'png').toLowerCase();
 
+        // Extra safety: if still bin-like, try signature again and then default to png
+        const sigExt = extFromBufferSig(fileBuffer);
+        if (extension === 'bin' && sigExt) extension = sigExt;
+        if (extension === 'bin') extension = 'png';
+
+        // Debug log of detection sources
+        try {
+            console.log('[attach] ext detection', { ct, byCt, byTeams, byName, byUrl, bySig, final: extension });
+        } catch {}
+
         // 3) Сохраняем файл в соответствующую подпапку
-        const isImg = ct.startsWith('image/') || isImageByExt(extension);
+        const isImg = ct.startsWith('image/') || isImageByExt(extension) || ['png','jpg','jpeg','gif','bmp','webp'].includes(sigExt);
         const publicUrl = saveFileToTmp(fileBuffer, { extension, originalName: name, contentType: ct, kind: isImg ? 'image' : 'doc' });
 
         // 4) Классифицируем: изображение → в imageUrls, остальные → в fileNotices
