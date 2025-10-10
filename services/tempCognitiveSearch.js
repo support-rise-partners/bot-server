@@ -143,8 +143,10 @@ function withSharePointDownloadHint(url) {
   } catch { return url; }
 }
 
-// Lädt Dateien in Blob Storage hoch (pro Sitzung)
-async function uploadSessionBlobsFromUrls({ sessionId, urls, container = BLOB_CONTAINER, prefix }) {
+// Lädt lokale Dateien in Blob Storage hoch (pro Sitzung)
+import fs from 'fs';
+import path from 'path';
+async function uploadSessionBlobsFromUrls({ sessionId, urls: localPaths, container = BLOB_CONTAINER, prefix }) {
   requireEnv('AZURE_STORAGE_CONNECTION_STRING');
 
   const bs = BlobServiceClient.fromConnectionString(AZURE_STORAGE_CONNECTION_STRING);
@@ -153,36 +155,36 @@ async function uploadSessionBlobsFromUrls({ sessionId, urls, container = BLOB_CO
 
   const folder = prefix || resourceNames(sessionId).prefix;
   const results = [];
-
   const failures = [];
-  for (const url of urls) {
-    const fileName = (url.split('?')[0].split('/').pop() || `file-${Date.now()}`);
-    const blobName = `${folder}${fileName}`;
-    const block = cont.getBlockBlobClient(blobName);
 
+  for (const filePath of localPaths) {
     try {
-      if (isLikelyBlobSas(url)) {
-        // Serverseitiges Kopieren per SAS (schnell, ohne Download)
-        await block.beginCopyFromURL(url);
-      } else {
-        // Direkter Download (öffentlich) – ggf. SharePoint-Download-Hinweis anhängen
-        let directUrl = url;
-        if (/sharepoint\.com|onedrive\.live\.com|teams\.microsoft\.com/i.test(url)) {
-          directUrl = withSharePointDownloadHint(url);
-        }
-        const resp = await axios.get(directUrl, { responseType: 'arraybuffer', timeout: 30000, validateStatus: s => s >= 200 && s < 400 });
-        const contentType = resp.headers['content-type'] || 'application/octet-stream';
-        await block.uploadData(resp.data, { blobHTTPHeaders: { blobContentType: contentType } });
-      }
-      results.push({ url, blobPath: `${container}/${blobName}` });
+      const abs = path.resolve(filePath);
+      const fileName = path.basename(abs);
+      const blobName = `${folder}${fileName}`;
+      const block = cont.getBlockBlobClient(blobName);
+
+      const buffer = fs.readFileSync(abs);
+      const ext = path.extname(fileName).slice(1).toLowerCase();
+      const mimeMap = {
+        pdf: 'application/pdf',
+        doc: 'application/msword',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        txt: 'text/plain',
+        csv: 'text/csv'
+      };
+      const contentType = mimeMap[ext] || 'application/octet-stream';
+
+      await block.uploadData(buffer, { blobHTTPHeaders: { blobContentType: contentType } });
+      results.push({ localPath: abs, blobPath: `${container}/${blobName}` });
     } catch (e) {
-      console.warn('[uploadSessionBlobsFromUrls] skip URL due to error:', url, e?.message || e);
-      failures.push({ url, error: e?.response?.status || e?.message || String(e) });
+      console.warn('[uploadSessionBlobsFromLocalPaths] Fehler beim Hochladen:', filePath, e?.message || e);
+      failures.push({ filePath, error: e?.message || String(e) });
     }
   }
 
   if (results.length === 0) {
-    const msg = `Keiner der übergebenen Links konnte geladen werden (z.B. 404/403). Übergib bitte öffentlich erreichbare URLs oder Blob-SAS-Links. Details: ${JSON.stringify(failures)}`;
+    const msg = `Keine lokalen Dateien konnten hochgeladen werden. Details: ${JSON.stringify(failures)}`;
     throw new Error(msg);
   }
 

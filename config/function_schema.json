@@ -107,8 +107,8 @@
       "properties": {
         "dokumente": {
           "type": "array",
-          "items": { "type": "string", "format": "uri" },
-          "description": "Vom Verlauf erkannte Links/URLs zu vom User angehängten Dokumenten (PDF, DOCX). Diese Links sollen mit https://bot.rise-partners.de/tmp/ beginnen. Bitte aus der User-Nachricht extrahieren."
+          "items": { "type": "string"},
+          "description": "Vom Verlauf erkannte vollständige Dateinamen der vom User angehängten Dokumente (PDF, DOCX). Bitte die vollständigen Namen (Name. Erweiterung) aus der User-Nachricht extrahieren, keine URLs."
         },
         "fragen": {
           "type": "array",

@@ -6,6 +6,9 @@ import {
   cleanupSessionResources
 } from '../services/tempCognitiveSearch.js';
 
+import path from 'path';
+import fs from 'fs';
+
 import { adapter } from '../bot/adapter.js';
 import { simpleChatCompletion, getChatCompletion } from '../services/openai.js';
 import { getEmailByUserName, getReferenceByEmail } from '../services/conversationReferenceService.js';
@@ -105,8 +108,8 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
           try {
             await adapter.continueConversation(conversationReference, async (turnContext) => {
               const response = await simpleChatCompletion(
-                'System: Du bist Risy – der freundliche Assistent. Umformuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
-                'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (leicht umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
+                'System: Du bist Risy – der freundliche Assistent. Umformuliere eine sehr kurze, lockere System-Nachricht im Du-Ton',
+                'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (Umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
               );
               const replyText = typeof response === 'string' ? response : response?.reply;
               if (replyText && replyText.trim()) {
@@ -135,7 +138,9 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
   const results = [];
   try {
     // 1) Vorbereitung & Indexierung
-    await prepareAndIndexSession({ sessionId, urls: dokumente });
+    const DOCS_DIR = path.resolve('tmp_attachments', 'docs');
+    const localDocPaths = dokumente.map(name => path.join(DOCS_DIR, path.basename(name)));
+    await prepareAndIndexSession({ sessionId, urls: localDocPaths });
 
     // 2) Fragen beantworten (Vektor-Suche → LLM mit Kontext)
     const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Gib **ausschließlich** JSON zurück im Format {"yesno": "ja"|"nein", "answer": string, "quote": string}.';
