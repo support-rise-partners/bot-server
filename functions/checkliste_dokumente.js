@@ -7,7 +7,7 @@ import {
 } from '../services/tempCognitiveSearch.js';
 
 import { adapter } from '../bot/adapter.js';
-import { getChatCompletion } from '../services/openai.js';
+import { simpleChatCompletion } from '../services/openai.js';
 import { getEmailByUserName, getReferenceByEmail } from '../services/conversationReferenceService.js';
 
 const OPENAI_ENDPOINT   = (process.env.OPENAI_ENDPOINT || '').trim();
