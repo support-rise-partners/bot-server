@@ -118,7 +118,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         .join('\n\n');
 
       const USER = `Frage: ${q}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort **nur** als JSON mit den Feldern {\"yesno\": \"ja\" oder \"nein\", \"answer\": string, \"quote\": string}.\n- \"yesno\" soll eine sehr kurze Ja/Nein-Entscheidung sein (\"ja\" wenn der Kontext eine klare Bejahung stützt, sonst \"nein\").\n- Schreibe keinerlei zusätzlichen Text außerhalb des JSON.`;
-
+      console.log("[DEBUG] Chunks für Frage:", q, JSON.stringify(chunks, null, 2));
       let raw = '';
       try {
         raw = await simpleChatCompletion(SYSTEM, USER);
