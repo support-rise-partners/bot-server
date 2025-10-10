@@ -69,7 +69,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       if (adapter && conversationReference) {
         await adapter.continueConversation(conversationReference, async (turnContext) => {
           const response = await simpleChatCompletion(
-            'System: Du bist Risy – der freundliche Assistent. Formuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
+            'System: Du bist Risy – der freundliche Assistent. Umformuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
             'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (zum Besipiel leicht umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
           );
           const replyText = typeof response === 'string' ? response : response?.reply;
