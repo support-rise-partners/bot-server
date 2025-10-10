@@ -1,4 +1,4 @@
-// functions/checkliste_dokumente.js (ESM, финальная версия, фикс парсинга args и дефолтного ответа)
+// functions/checkliste_dokumente.js (ESM, finale Fassung)
 
 import {
   prepareAndIndexSession,
@@ -10,22 +10,12 @@ import { adapter } from '../bot/adapter.js';
 import { simpleChatCompletion } from '../services/openai.js';
 import { getEmailByUserName, getReferenceByEmail } from '../services/conversationReferenceService.js';
 
-const OPENAI_ENDPOINT   = (process.env.OPENAI_ENDPOINT || '').trim();
-const OPENAI_KEY        = (process.env.OPENAI_KEY || '').trim();
-const OPENAI_DEPLOYMENT = (process.env.OPENAI_DEPLOYMENT || 'gpt-4o').trim();
-const OPENAI_VERSION    = (process.env.OPENAI_VERSION || '2024-12-01-preview').trim();
-
-// Безопасная сериализация для логов
-function safeStringify(obj) {
-  try { return JSON.stringify(obj); } catch { return String(obj); }
-}
-
-// --- НОВОЕ: нормализация аргументов из function calling (строка JSON или объект)
+// JSON-String → Objekt (oder Fehlerstruktur)
 function normalizeArgs(raw) {
   let a = raw;
   if (typeof raw === 'string') {
     try { a = JSON.parse(raw); } catch {
-      return { dokumente: [], fragen: [], _error: 'Ungültiges JSON in args (String konnte nicht geparst werden).' };
+      return { dokumente: [], fragen: [], _error: 'Ungültiges JSON in args.' };
     }
   }
   a = a && typeof a === 'object' ? a : {};
@@ -34,7 +24,7 @@ function normalizeArgs(raw) {
   return { dokumente, fragen };
 }
 
-
+// Robust: extrahiert JSON aus evtl. eingezäunten Antwort-Strings
 function parseJsonSafe(raw) {
   const s = typeof raw === 'string' ? raw.trim() : String(raw || '');
   const fenced = s.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
@@ -44,92 +34,59 @@ function parseJsonSafe(raw) {
   return null;
 }
 
-// --- НОВОЕ: нормализация conversationReference из getReferenceByEmail(email)
+// Prüft minimale Felder für ConversationReference
 function isValidConversationReference(ref) {
   return !!(ref && ref.serviceUrl && ref.conversation && ref.conversation.id);
 }
 
+// Vereinheitlicht unterschiedliche Rückgabetypen aus getReferenceByEmail
 function resolveConversationReference(refResult) {
-  // Может прийти объект { email, reference }, массив таких объектов, либо сам reference
   if (Array.isArray(refResult)) {
     const first = refResult.find(r => r && (r.reference || r.reference === 0));
     const ref = first?.reference || first;
     return isValidConversationReference(ref) ? ref : null;
   }
-  // Если объект с полем reference
   if (refResult && typeof refResult === 'object' && refResult.reference) {
     return isValidConversationReference(refResult.reference) ? refResult.reference : null;
   }
-  // Если это уже reference
   return isValidConversationReference(refResult) ? refResult : null;
 }
 
 /**
- * Default-экспорт для function calling:
+ * Default-Export für Function-Calling:
  *   export default async function (sessionId, userName, args)
- * args: { dokumente: string[], fragen: string[] } ИЛИ JSON-строка с такими полями
+ * args: { dokumente: string[], fragen: string[] } ODER JSON-String mit diesen Feldern
  */
 export default async function checkliste_dokumente(sessionId, userName, args = {}) {
-  console.log(`[checkliste_dokumente] start sessionId=${sessionId}, userName="${userName}", argsType=${typeof args}`);
-  if (typeof args === 'string') {
-    console.log('[checkliste_dokumente] raw args string preview:', (args.length > 300 ? args.slice(0, 300) + '…' : args));
-  } else {
-    console.log('[checkliste_dokumente] raw args object preview:', safeStringify(args).slice(0, 300));
-  }
-  // --- НОВОЕ: корректная распаковка аргументов
   const { dokumente, fragen, _error } = normalizeArgs(args);
-  console.log(`[checkliste_dokumente] normalized: dokumente=${dokumente.length}, fragen=${fragen.length}, hasError=${!!_error}`);
 
-  // Попробуем отправить «подожди»-сообщение до старта пайплайна
+  // Vorab-Hinweis an den Nutzer (falls ConversationReference vorhanden)
   try {
-    console.log('[notify] resolving ConversationReference…');
-    console.log(`[notify] getEmailByUserName("${userName}") → start`);
     const email = await getEmailByUserName(userName);
-    console.log(`[notify] getEmailByUserName("${userName}") →`, email || 'null');
-    let conversationReference = null;
     if (email) {
-      console.log(`[notify] getReferenceByEmail("${email}") → start`);
       const refResult = await getReferenceByEmail(email);
-      console.log('[notify] getReferenceByEmail result type=', Array.isArray(refResult) ? 'array' : typeof refResult);
-      console.log('[notify] getReferenceByEmail result preview=', safeStringify(refResult).slice(0, 500));
-      conversationReference = resolveConversationReference(refResult);
-      console.log('[notify] resolveConversationReference →',
-        conversationReference ? `valid=${isValidConversationReference(conversationReference)} serviceUrl=${conversationReference?.serviceUrl} convId=${conversationReference?.conversation?.id}` : 'null');
+      const conversationReference = resolveConversationReference(refResult);
+      if (adapter && conversationReference) {
+        await adapter.continueConversation(conversationReference, async (turnContext) => {
+          const response = await simpleChatCompletion(
+            'System: Du bist Risy – der freundliche Assistent. Formuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
+            'Erzeuge eine kurze, freundliche Hinweis-Nachricht (Deutsch).'
+          );
+          const replyText = typeof response === 'string' ? response : response?.reply;
+          if (replyText && replyText.trim()) {
+            await turnContext.sendActivity({ type: 'message', text: replyText });
+          }
+        });
+      }
     }
+  } catch {}
 
-    console.log('[notify] adapter present=', !!adapter, 'conversationReference present=', !!conversationReference);
-    if (adapter && conversationReference) {
-      console.log('[notify] calling adapter.continueConversation…');
-      await adapter.continueConversation(conversationReference, async (turnContext) => {
-        console.log('[notify] continueConversation: building system reply via getChatCompletion…');
-        const response = await simpleChatCompletion(
-          'System: Du bist Risy – der freundliche, hilfsbereite Assistent für die Mitarbeitenden von RISE PARTNERS Audit GmbH. Formuliere eine kurze, lockere und empathische Nachricht im Du-Tonfall: Hmm... ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort! Halte dich kurz, natürlich und menschlich – gern mit einem passenden Emoji.',
-          'Erzeuge jetzt eine kurze, freundliche Hinweis-Nachricht als Antwort auf die Nutzeranfrage'
-        );
-        const replyText = typeof response === 'string' ? response : response?.reply;
-        console.log('[notify] getChatCompletion reply length=', replyText ? replyText.length : 0);
-        if (replyText && replyText.trim()) {
-          await turnContext.sendActivity({ type: 'message', text: replyText });
-        } else {
-          console.warn("⚠️ Leere/ungültige OpenAI-Antwort: replyText=", replyText, " raw=", safeStringify(response));
-        }
-      });
-    } else {
-      if (!adapter) console.warn('⚠️ Kein Bot-Adapter verfügbar.');
-      if (!conversationReference) console.warn('⚠️ Keine gültige ConversationReference gefunden – Vorab-Nachricht wird übersprungen.');
-    }
-  } catch (e) {
-    console.warn('⚠️ Fehler beim Senden der Vorab-Nachricht:', e?.stack || e?.message || e);
-  }
-
-  // Если парсинг провалился — вернём осмысленный результат, а не пустоту
+  // Frühe Fehlerfälle
   if (_error) {
     const results = [{ frage: null, antwort: 'Fehler beim Verarbeiten der Eingabe.', zitat: _error }];
     console.log(results);
     return JSON.stringify(results);
   }
-
-  // Нет документов — сразу возвращаем понятный ответ (не пустой)
   if (!dokumente.length) {
     const results = [{ frage: null, antwort: 'Keine Dokumente übermittelt.', zitat: '' }];
     console.log(results);
@@ -138,29 +95,21 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
 
   const results = [];
   try {
-    console.log('[pipeline] prepareAndIndexSession → start', { sessionId, docs: dokumente.length });
-    // 1) Подготовка и индексация
+    // 1) Vorbereitung & Indexierung
     await prepareAndIndexSession({ sessionId, urls: dokumente });
-    console.log('[pipeline] prepareAndIndexSession → done');
 
-    // 2) Ответы по вопросам
+    // 2) Fragen beantworten (Vektor-Suche → LLM mit Kontext)
     const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Antworte als JSON {"answer": string, "quote": string}.';
-
     for (const frage of fragen) {
-      const trimmed = (frage || '').toString().trim();
-      console.log('[pipeline] Frage:', trimmed);
-      if (!trimmed) {
+      const q = (frage || '').toString().trim();
+      if (!q) {
         results.push({ frage, antwort: 'Leere Frage.', zitat: '' });
         continue;
       }
 
-      const chunks = await vectorSearchTopK({ sessionId, text: trimmed, k: 3 });
-      console.log('[pipeline] vectorSearchTopK count=', chunks.length);
-      if (chunks.length) {
-        console.log('[pipeline] top doc titles:', chunks.map(c => c.document_title).slice(0,3));
-      }
+      const chunks = await vectorSearchTopK({ sessionId, text: q, k: 3 });
       if (!chunks.length) {
-        results.push({ frage, antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
+        results.push({ frage: q, antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
         continue;
       }
 
@@ -168,16 +117,15 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         .map((c, i) => `# Chunk ${i + 1} — ${c.document_title}\n${c.content_text}`)
         .join('\n\n');
 
-      const USER = `Frage: ${trimmed}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort als JSON.`;
+      const USER = `Frage: ${q}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort als JSON.`;
 
       let raw = '';
       try {
         raw = await simpleChatCompletion(SYSTEM, USER);
-      } catch (e) {
-        console.warn('[pipeline] simpleChatCompletion error:', (e && (e.stack || e.message)) || e);
+      } catch {
         results.push({
-          frage,
-          antwort: 'Antwort konnte nicht generiert werden (LLM-Fehler).',
+          frage: q,
+          antwort: 'Antwort konnte nicht generiert werden.',
           zitat: chunks[0]?.content_text?.slice(0, 600) || ''
         });
         continue;
@@ -186,24 +134,19 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       const parsed = parseJsonSafe(raw);
       const antwort = parsed?.answer || (typeof raw === 'string' ? raw : '');
       const zitat   = parsed?.quote  || (chunks[0]?.content_text || '').slice(0, 600);
-
-      results.push({ frage, antwort, zitat });
+      results.push({ frage: q, antwort, zitat });
     }
   } catch (err) {
-    // --- НОВОЕ: не оставляем пустой массив — кладём понятный объект с ошибкой
     const msg = err?.message || String(err);
-    console.error('[checkliste_dokumente] Pipeline-Fehler:', err?.stack || msg);
     results.push({ frage: null, antwort: 'Interner Fehler im Verarbeitungspipeline.', zitat: msg });
   } finally {
-    // 3) Уборка временных ресурсов
+    // 3) Aufräumen: temporäre Ressourcen entfernen
     try {
       await cleanupSessionResources({ sessionId, deleteIndex: true, deleteDataSource: true, deleteBlobs: true });
-    } catch (e) {
-      console.error('[cleanup] Aufräumen fehlgeschlagen:', e?.message || e);
-    }
+    } catch {}
   }
 
-  // В консоль выводим именно массив результатов (не пустую строку)
+  // Gewünschte Konsolenausgabe des Ergebnis-Arrays
   console.log(results);
   return JSON.stringify(results);
 }
