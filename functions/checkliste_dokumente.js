@@ -6,7 +6,7 @@ import {
   cleanupSessionResources
 } from '../services/tempCognitiveSearch.js';
 
-import { getChatCompletion } from '../services/openaiService.js';
+import { getChatCompletion } from '../services/openai.js';
 
 const OPENAI_ENDPOINT   = (process.env.OPENAI_ENDPOINT || '').trim();
 const OPENAI_KEY        = (process.env.OPENAI_KEY || '').trim();
