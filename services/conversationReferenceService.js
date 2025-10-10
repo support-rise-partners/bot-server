@@ -51,18 +51,48 @@ export async function getReferenceByEmail(emails) {
     if (Array.isArray(emails)) {
       const results = [];
       for (const email of emails) {
-        if (!email) continue;
-        try {
-          const { id } = await getUserInfoByEmail(email);
-          const entity = await referenceClient.getEntity(id, id);
-          results.push({ email, reference: JSON.parse(entity.reference) });
-        } catch (err) {
-          console.error(`⚠️ Keine ConversationReference für ${email}:`, err.message);
-          results.push({ email, reference: undefined });
-        }
+        if (!email) { results.push({ email, reference: undefined }); continue; }
+        const reference = await getSingleReferenceByEmail(email);
+        results.push({ email, reference });
       }
       return results;
     }
+
+    // Case 3: Single email (string) → return the ConversationReference or null
+    if (typeof emails === 'string') {
+      return await getSingleReferenceByEmail(emails);
+    }
+// Hilfsfunktion: holt eine einzelne ConversationReference zu einem E-Mail-Wert
+async function getSingleReferenceByEmail(email) {
+  if (!email) return null;
+  const target = String(email).toLowerCase();
+
+  // 1) Versuche via Graph die AAD-ID zu finden und direkt per Schlüssel zu lesen
+  try {
+    const { id } = await getUserInfoByEmail(target);
+    if (id) {
+      const entity = await referenceClient.getEntity(id, id);
+      try { return JSON.parse(entity.reference); } catch { return null; }
+    }
+  } catch {
+    // Ignorieren, weiter mit Fallback
+  }
+
+  // 2) Fallback: vollständiges Durchlaufen der Tabelle und Match auf email (case-insensitive)
+  try {
+    const entities = referenceClient.listEntities();
+    for await (const entity of entities) {
+      const em = (entity.email || '').toLowerCase();
+      if (em === target) {
+        try { return JSON.parse(entity.reference); } catch { return null; }
+      }
+    }
+  } catch {
+    // Ignorieren
+  }
+
+  return null;
+}
     // Fallback: unsupported type → empty array
     return [];
   } catch (err) {
