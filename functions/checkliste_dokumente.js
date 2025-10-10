@@ -6,7 +6,9 @@ import {
   cleanupSessionResources
 } from '../services/tempCognitiveSearch.js';
 
+import { adapter } from '../bot/adapter.js';
 import { getChatCompletion } from '../services/openai.js';
+import { getEmailByUserName, getReferenceByEmail } from '../services/conversationReferenceService.js';
 
 const OPENAI_ENDPOINT   = (process.env.OPENAI_ENDPOINT || '').trim();
 const OPENAI_KEY        = (process.env.OPENAI_KEY || '').trim();
@@ -31,7 +33,7 @@ function normalizeArgs(raw) {
 async function simpleChatCompletion(systemPromptText, userPromptText) {
   if (!OPENAI_ENDPOINT || !OPENAI_KEY) {
     throw new Error('OPENAI_ENDPOINT/OPENAI_KEY sind nicht gesetzt.');
-  }
+    }
   const url = `${OPENAI_ENDPOINT}/openai/deployments/${OPENAI_DEPLOYMENT}/chat/completions?api-version=${OPENAI_VERSION}`;
   const resp = await fetch(url, {
     method: 'POST',
@@ -62,6 +64,26 @@ function parseJsonSafe(raw) {
   return null;
 }
 
+// --- НОВОЕ: нормализация conversationReference из getReferenceByEmail(email)
+function isValidConversationReference(ref) {
+  return !!(ref && ref.serviceUrl && ref.conversation && ref.conversation.id);
+}
+
+function resolveConversationReference(refResult) {
+  // Может прийти объект { email, reference }, массив таких объектов, либо сам reference
+  if (Array.isArray(refResult)) {
+    const first = refResult.find(r => r && (r.reference || r.reference === 0));
+    const ref = first?.reference || first;
+    return isValidConversationReference(ref) ? ref : null;
+  }
+  // Если объект с полем reference
+  if (refResult && typeof refResult === 'object' && refResult.reference) {
+    return isValidConversationReference(refResult.reference) ? refResult.reference : null;
+  }
+  // Если это уже reference
+  return isValidConversationReference(refResult) ? refResult : null;
+}
+
 /**
  * Default-экспорт для function calling:
  *   export default async function (sessionId, userName, args)
@@ -71,8 +93,15 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
   // --- НОВОЕ: корректная распаковка аргументов
   const { dokumente, fragen, _error } = normalizeArgs(args);
 
+  // Попробуем отправить «подожди»-сообщение до старта пайплайна
   try {
-    const { adapter, conversationReference } = options || {};
+    const email = await getEmailByUserName(userName);
+    let conversationReference = null;
+    if (email) {
+      const refResult = await getReferenceByEmail(email);
+      conversationReference = resolveConversationReference(refResult);
+    }
+
     if (adapter && conversationReference) {
       await adapter.continueConversation(conversationReference, async (turnContext) => {
         const response = await getChatCompletion({
@@ -87,6 +116,9 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
           console.warn("⚠️ Leere/ungültige OpenAI-Antwort:", JSON.stringify(response, null, 2));
         }
       });
+    } else {
+      if (!adapter) console.warn('⚠️ Kein Bot-Adapter verfügbar.');
+      if (!conversationReference) console.warn('⚠️ Keine gültige ConversationReference gefunden – Vorab-Nachricht wird übersprungen.');
     }
   } catch (e) {
     console.warn('⚠️ Fehler beim Senden der Vorab-Nachricht:', e?.message || e);
