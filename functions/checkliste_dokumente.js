@@ -169,7 +169,7 @@ ${context}
 Formatiere die Antwort **nur** als JSON mit den Feldern {"yesno": "ja" oder "nein", "answer": string, "quote": string, "quelle": string}.
 - "yesno": sehr kurze Ja/Nein-Entscheidung ("ja" wenn der Kontext klar bejaht, sonst "nein").
 - "answer": kurze, präzise Begründung.
-- "quote": wörtliches Zitat aus dem **ausschlaggebenden** Chunk.
+- "quote": wörtliches Zitat aus dem Kontext, das für die Beantwortung der Frage ausschlaggebend ist.
 - "quelle": **exakter Titel** des Dokuments aus dem **ausschlaggebenden** Chunk (so wie er in den Überschriften "# Chunk N — <Dokumenttitel>" steht).
 - Keine Einleitung/Erklärung außerhalb des JSON.`;
 
