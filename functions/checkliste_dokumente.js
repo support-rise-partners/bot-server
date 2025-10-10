@@ -72,14 +72,24 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
   const { dokumente, fragen, _error } = normalizeArgs(args);
 
   try {
-    await getChatCompletion({
-      sessionId,
-      role: 'system',
-      text: 'Hmm... ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!',
-      userName
-    });
+    const { adapter, conversationReference } = options || {};
+    if (adapter && conversationReference) {
+      await adapter.continueConversation(conversationReference, async (turnContext) => {
+        const response = await getChatCompletion({
+          sessionId: conversationReference?.conversation?.id,
+          role: 'system',
+          text: 'Hmm... ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!'
+        });
+        const replyText = typeof response === 'string' ? response : response?.reply;
+        if (replyText && replyText.trim()) {
+          await turnContext.sendActivity({ type: 'message', text: replyText });
+        } else {
+          console.warn("⚠️ Leere/ungültige OpenAI-Antwort:", JSON.stringify(response, null, 2));
+        }
+      });
+    }
   } catch (e) {
-    // Fehler beim Senden der Vorab-Nachricht ignorieren
+    console.warn('⚠️ Fehler beim Senden der Vorab-Nachricht:', e?.message || e);
   }
 
   // Если парсинг провалился — вернём осмысленный результат, а не пустоту
