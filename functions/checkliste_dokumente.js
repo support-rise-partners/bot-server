@@ -53,19 +53,33 @@ function resolveConversationReference(refResult) {
 }
 
 async function sendResultsToPowerAutomate(results, email) {
-  const POWER_AUTOMATE_URL = 'https://YOUR-POWER-AUTOMATE-HTTP-TRIGGER-URL';
+  console.log('📤 [PowerAutomate] Инициализация запроса...');
+  console.log('📧 Email:', email);
+  console.log('📦 Results:', JSON.stringify(results, null, 2));
+
+  const POWER_AUTOMATE_URL = 'https://defaultf70052617df14a29b0f88bb1e67576.23.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/b8006ed7ba9942f28d67c05193810077/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=8E4SZmPHTHwQfW_3x0d1E1xnbLeKOR_69YE1nKX1_0Y';
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
 
   try {
+    console.log('🚀 [PowerAutomate] Отправка запроса на:', POWER_AUTOMATE_URL);
+    console.time('⏱️ PowerAutomate Fetch Duration');
     const res = await fetch(POWER_AUTOMATE_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email || null, results }),
       signal: controller.signal
     });
+    console.timeEnd('⏱️ PowerAutomate Fetch Duration');
+    console.log('✅ [PowerAutomate] Ответ получен. Status:', res.status);
+
     const text = await res.text().catch(() => '');
+    console.log('📩 [PowerAutomate] Тело ответа:', text.slice(0, 500)); // показываем первые 500 символов
     return { ok: res.ok, status: res.status, body: text };
+  } catch (err) {
+    console.error('❌ [PowerAutomate] Ошибка при выполнении fetch:', err?.name, err?.message);
+    if (err?.stack) console.error(err.stack.split('\n').slice(0, 5).join('\n'));
+    throw err;
   } finally {
     clearTimeout(timeout);
   }
