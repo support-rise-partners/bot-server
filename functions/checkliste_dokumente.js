@@ -83,12 +83,12 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
 
   // Frühe Fehlerfälle
   if (_error) {
-    const results = [{ frage: null, antwort: 'Fehler beim Verarbeiten der Eingabe.', zitat: _error }];
+    const results = [{ frage: null, yesno: '', antwort: 'Fehler beim Verarbeiten der Eingabe.', zitat: _error }];
     console.log(results);
     return JSON.stringify(results);
   }
   if (!dokumente.length) {
-    const results = [{ frage: null, antwort: 'Keine Dokumente übermittelt.', zitat: '' }];
+    const results = [{ frage: null, yesno: '', antwort: 'Keine Dokumente übermittelt.', zitat: '' }];
     console.log(results);
     return JSON.stringify(results);
   }
@@ -99,17 +99,17 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
     await prepareAndIndexSession({ sessionId, urls: dokumente });
 
     // 2) Fragen beantworten (Vektor-Suche → LLM mit Kontext)
-    const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Antworte als JSON {"answer": string, "quote": string}.';
+    const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Gib **ausschließlich** JSON zurück im Format {"yesno": "ja"|"nein", "answer": string, "quote": string}.';
     for (const frage of fragen) {
       const q = (frage || '').toString().trim();
       if (!q) {
-        results.push({ frage, antwort: 'Leere Frage.', zitat: '' });
+        results.push({ frage, yesno: '', antwort: 'Leere Frage.', zitat: '' });
         continue;
       }
 
       const chunks = await vectorSearchTopK({ sessionId, text: q, k: 3 });
       if (!chunks.length) {
-        results.push({ frage: q, antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
+        results.push({ frage: q, yesno: 'nein', antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
         continue;
       }
 
@@ -117,7 +117,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         .map((c, i) => `# Chunk ${i + 1} — ${c.document_title}\n${c.content_text}`)
         .join('\n\n');
 
-      const USER = `Frage: ${q}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort als JSON.`;
+      const USER = `Frage: ${q}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort **nur** als JSON mit den Feldern {\"yesno\": \"ja\" oder \"nein\", \"answer\": string, \"quote\": string}.\n- \"yesno\" soll eine sehr kurze Ja/Nein-Entscheidung sein (\"ja\" wenn der Kontext eine klare Bejahung stützt, sonst \"nein\").\n- Schreibe keinerlei zusätzlichen Text außerhalb des JSON.`;
 
       let raw = '';
       try {
@@ -125,6 +125,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       } catch {
         results.push({
           frage: q,
+          yesno: '',
           antwort: 'Antwort konnte nicht generiert werden.',
           zitat: chunks[0]?.content_text?.slice(0, 600) || ''
         });
@@ -132,13 +133,14 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       }
 
       const parsed = parseJsonSafe(raw);
+      const yesno  = typeof parsed?.yesno === 'string' ? parsed.yesno.trim().toLowerCase() : '';
       const antwort = parsed?.answer || (typeof raw === 'string' ? raw : '');
       const zitat   = parsed?.quote  || (chunks[0]?.content_text || '').slice(0, 600);
-      results.push({ frage: q, antwort, zitat });
+      results.push({ frage: q, yesno, antwort, zitat });
     }
   } catch (err) {
     const msg = err?.message || String(err);
-    results.push({ frage: null, antwort: 'Interner Fehler im Verarbeitungspipeline.', zitat: msg });
+    results.push({ frage: null, yesno: '', antwort: 'Interner Fehler im Verarbeitungspipeline.', zitat: msg });
   } finally {
     // 3) Aufräumen: temporäre Ressourcen entfernen
     try {
