@@ -7,7 +7,7 @@ import {
 } from '../services/tempCognitiveSearch.js';
 
 import { adapter } from '../bot/adapter.js';
-import { simpleChatCompletion } from '../services/openai.js';
+import { simpleChatCompletion, getChatCompletion } from '../services/openai.js';
 import { getEmailByUserName, getReferenceByEmail } from '../services/conversationReferenceService.js';
 
 // JSON-String → Objekt (oder Fehlerstruktur)
@@ -52,6 +52,25 @@ function resolveConversationReference(refResult) {
   return isValidConversationReference(refResult) ? refResult : null;
 }
 
+async function sendResultsToPowerAutomate(results, email) {
+  const POWER_AUTOMATE_URL = 'https://YOUR-POWER-AUTOMATE-HTTP-TRIGGER-URL';
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+
+  try {
+    const res = await fetch(POWER_AUTOMATE_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email || null, results }),
+      signal: controller.signal
+    });
+    const text = await res.text().catch(() => '');
+    return { ok: res.ok, status: res.status, body: text };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Default-Export für Function-Calling:
  *   export default async function (sessionId, userName, args)
@@ -60,23 +79,28 @@ function resolveConversationReference(refResult) {
 export default async function checkliste_dokumente(sessionId, userName, args = {}) {
   const { dokumente, fragen, _error } = normalizeArgs(args);
 
-  // Vorab-Hinweis an den Nutzer (falls ConversationReference vorhanden)
+  // Kurze Vorab-Nachricht an den Nutzer (falls ConversationReference vorhanden)
   try {
     const email = await getEmailByUserName(userName);
     if (email) {
       const refResult = await getReferenceByEmail(email);
       const conversationReference = resolveConversationReference(refResult);
       if (adapter && conversationReference) {
-        await adapter.continueConversation(conversationReference, async (turnContext) => {
-          const response = await simpleChatCompletion(
-            'System: Du bist Risy – der freundliche Assistent. Umformuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
-            'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (leicht umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
-          );
-          const replyText = typeof response === 'string' ? response : response?.reply;
-          if (replyText && replyText.trim()) {
-            await turnContext.sendActivity({ type: 'message', text: replyText });
-          }
-        });
+        // asynchron starten, Hauptfluss nicht blockieren
+        (async () => {
+          try {
+            await adapter.continueConversation(conversationReference, async (turnContext) => {
+              const response = await simpleChatCompletion(
+                'System: Du bist Risy – der freundliche Assistent. Umformuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
+                'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (leicht umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
+              );
+              const replyText = typeof response === 'string' ? response : response?.reply;
+              if (replyText && replyText.trim()) {
+                await turnContext.sendActivity({ type: 'message', text: replyText });
+              }
+            });
+          } catch {}
+        })();
       }
     }
   } catch {}
@@ -85,6 +109,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
   if (_error) {
     const results = [{ frage: null, yesno: '', antwort: 'Fehler beim Verarbeiten der Eingabe.', zitat: _error }];
     console.log(results);
+    // optional an Power Automate senden (Fehlerfall)
     return JSON.stringify(results);
   }
   if (!dokumente.length) {
@@ -118,6 +143,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         .join('\n\n');
 
       const USER = `Frage: ${q}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort **nur** als JSON mit den Feldern {\"yesno\": \"ja\" oder \"nein\", \"answer\": string, \"quote\": string}.\n- \"yesno\" soll eine sehr kurze Ja/Nein-Entscheidung sein (\"ja\" wenn der Kontext eine klare Bejahung stützt, sonst \"nein\").\n- Schreibe keinerlei zusätzlichen Text außerhalb des JSON.`;
+
       let raw = '';
       try {
         raw = await simpleChatCompletion(SYSTEM, USER);
@@ -147,7 +173,27 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
     } catch {}
   }
 
-  // Gewünschte Konsolenausgabe des Ergebnis-Arrays
-  console.log(results);
-  return JSON.stringify(results);
+  // Ergebnisse an Power Automate senden und Antwort verwenden
+  try {
+    const email = await getEmailByUserName(userName);
+    const pa = await sendResultsToPowerAutomate(results, email);
+    if (pa?.ok) {
+      const aiResp = await getChatCompletion({
+        sessionId,
+        role: 'system',
+        text: pa.body || '',
+        userName
+      });
+      const replyText = typeof aiResp === 'string' ? aiResp : (aiResp?.reply ?? JSON.stringify(aiResp));
+      console.log('✅ Finale AI-Antwort:', replyText);
+      return replyText;
+    } else {
+      console.log('⚠️ Power Automate hat keine gültige Antwort geliefert:', pa);
+      return JSON.stringify(results);
+    }
+  } catch (err) {
+    console.error('❌ Fehler beim Power Automate-Schritt:', err.message);
+    console.log(results);
+    return JSON.stringify(results);
+  }
 }
