@@ -15,6 +15,11 @@ const OPENAI_KEY        = (process.env.OPENAI_KEY || '').trim();
 const OPENAI_DEPLOYMENT = (process.env.OPENAI_DEPLOYMENT || 'gpt-4o').trim();
 const OPENAI_VERSION    = (process.env.OPENAI_VERSION || '2024-12-01-preview').trim();
 
+// Безопасная сериализация для логов
+function safeStringify(obj) {
+  try { return JSON.stringify(obj); } catch { return String(obj); }
+}
+
 // --- НОВОЕ: нормализация аргументов из function calling (строка JSON или объект)
 function normalizeArgs(raw) {
   let a = raw;
@@ -90,30 +95,49 @@ function resolveConversationReference(refResult) {
  * args: { dokumente: string[], fragen: string[] } ИЛИ JSON-строка с такими полями
  */
 export default async function checkliste_dokumente(sessionId, userName, args = {}) {
+  console.log(`[checkliste_dokumente] start sessionId=${sessionId}, userName="${userName}", argsType=${typeof args}`);
+  if (typeof args === 'string') {
+    console.log('[checkliste_dokumente] raw args string preview:', (args.length > 300 ? args.slice(0, 300) + '…' : args));
+  } else {
+    console.log('[checkliste_dokumente] raw args object preview:', safeStringify(args).slice(0, 300));
+  }
   // --- НОВОЕ: корректная распаковка аргументов
   const { dokumente, fragen, _error } = normalizeArgs(args);
+  console.log(`[checkliste_dokumente] normalized: dokumente=${dokumente.length}, fragen=${fragen.length}, hasError=${!!_error}`);
 
   // Попробуем отправить «подожди»-сообщение до старта пайплайна
   try {
+    console.log('[notify] resolving ConversationReference…');
+    console.log(`[notify] getEmailByUserName("${userName}") → start`);
     const email = await getEmailByUserName(userName);
+    console.log(`[notify] getEmailByUserName("${userName}") →`, email || 'null');
     let conversationReference = null;
     if (email) {
+      console.log(`[notify] getReferenceByEmail("${email}") → start`);
       const refResult = await getReferenceByEmail(email);
+      console.log('[notify] getReferenceByEmail result type=', Array.isArray(refResult) ? 'array' : typeof refResult);
+      console.log('[notify] getReferenceByEmail result preview=', safeStringify(refResult).slice(0, 500));
       conversationReference = resolveConversationReference(refResult);
+      console.log('[notify] resolveConversationReference →',
+        conversationReference ? `valid=${isValidConversationReference(conversationReference)} serviceUrl=${conversationReference?.serviceUrl} convId=${conversationReference?.conversation?.id}` : 'null');
     }
 
+    console.log('[notify] adapter present=', !!adapter, 'conversationReference present=', !!conversationReference);
     if (adapter && conversationReference) {
+      console.log('[notify] calling adapter.continueConversation…');
       await adapter.continueConversation(conversationReference, async (turnContext) => {
+        console.log('[notify] continueConversation: building system reply via getChatCompletion…');
         const response = await getChatCompletion({
           sessionId: conversationReference?.conversation?.id,
           role: 'system',
           text: 'Hmm... ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!'
         });
         const replyText = typeof response === 'string' ? response : response?.reply;
+        console.log('[notify] getChatCompletion reply length=', replyText ? replyText.length : 0);
         if (replyText && replyText.trim()) {
           await turnContext.sendActivity({ type: 'message', text: replyText });
         } else {
-          console.warn("⚠️ Leere/ungültige OpenAI-Antwort:", JSON.stringify(response, null, 2));
+          console.warn("⚠️ Leere/ungültige OpenAI-Antwort: replyText=", replyText, " raw=", safeStringify(response));
         }
       });
     } else {
@@ -121,7 +145,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       if (!conversationReference) console.warn('⚠️ Keine gültige ConversationReference gefunden – Vorab-Nachricht wird übersprungen.');
     }
   } catch (e) {
-    console.warn('⚠️ Fehler beim Senden der Vorab-Nachricht:', e?.message || e);
+    console.warn('⚠️ Fehler beim Senden der Vorab-Nachricht:', e?.stack || e?.message || e);
   }
 
   // Если парсинг провалился — вернём осмысленный результат, а не пустоту
@@ -140,20 +164,27 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
 
   const results = [];
   try {
+    console.log('[pipeline] prepareAndIndexSession → start', { sessionId, docs: dokumente.length });
     // 1) Подготовка и индексация
     await prepareAndIndexSession({ sessionId, urls: dokumente });
+    console.log('[pipeline] prepareAndIndexSession → done');
 
     // 2) Ответы по вопросам
     const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Antworte als JSON {"answer": string, "quote": string}.';
 
     for (const frage of fragen) {
       const trimmed = (frage || '').toString().trim();
+      console.log('[pipeline] Frage:', trimmed);
       if (!trimmed) {
         results.push({ frage, antwort: 'Leere Frage.', zitat: '' });
         continue;
       }
 
       const chunks = await vectorSearchTopK({ sessionId, text: trimmed, k: 3 });
+      console.log('[pipeline] vectorSearchTopK count=', chunks.length);
+      if (chunks.length) {
+        console.log('[pipeline] top doc titles:', chunks.map(c => c.document_title).slice(0,3));
+      }
       if (!chunks.length) {
         results.push({ frage, antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
         continue;
@@ -168,7 +199,8 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       let raw = '';
       try {
         raw = await simpleChatCompletion(SYSTEM, USER);
-      } catch {
+      } catch (e) {
+        console.warn('[pipeline] simpleChatCompletion error:', (e && (e.stack || e.message)) || e);
         results.push({
           frage,
           antwort: 'Antwort konnte nicht generiert werden (LLM-Fehler).',
@@ -186,7 +218,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
   } catch (err) {
     // --- НОВОЕ: не оставляем пустой массив — кладём понятный объект с ошибкой
     const msg = err?.message || String(err);
-    console.error('[checkliste_dokumente] Pipeline-Fehler:', msg);
+    console.error('[checkliste_dokumente] Pipeline-Fehler:', err?.stack || msg);
     results.push({ frage: null, antwort: 'Interner Fehler im Verarbeitungspipeline.', zitat: msg });
   } finally {
     // 3) Уборка временных ресурсов
