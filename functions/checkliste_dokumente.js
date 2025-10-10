@@ -34,31 +34,6 @@ function normalizeArgs(raw) {
   return { dokumente, fragen };
 }
 
-// Мини-обёртка для Chat Completion
-async function simpleChatCompletion(systemPromptText, userPromptText) {
-  if (!OPENAI_ENDPOINT || !OPENAI_KEY) {
-    throw new Error('OPENAI_ENDPOINT/OPENAI_KEY sind nicht gesetzt.');
-    }
-  const url = `${OPENAI_ENDPOINT}/openai/deployments/${OPENAI_DEPLOYMENT}/chat/completions?api-version=${OPENAI_VERSION}`;
-  const resp = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'api-key': OPENAI_KEY },
-    body: JSON.stringify({
-      messages: [
-        { role: 'system', content: systemPromptText },
-        { role: 'user',   content: userPromptText }
-      ],
-      temperature: 0.1,
-      response_format: { type: 'json_object' }
-    })
-  });
-  if (!resp.ok) {
-    const t = await resp.text().catch(() => '');
-    throw new Error(`OpenAI Chat Fehler: ${resp.status} ${t}`);
-  }
-  const data = await resp.json();
-  return data?.choices?.[0]?.message?.content || '';
-}
 
 function parseJsonSafe(raw) {
   const s = typeof raw === 'string' ? raw.trim() : String(raw || '');
