@@ -1,6 +1,8 @@
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import fs from 'fs';
+import path from 'path';
 import { adapter } from './bot/adapter.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -12,7 +14,17 @@ import { startExternalWeeklyScheduler } from './services/blobExportService/sites
 
 const app = express().use(express.json());
 app.use(express.static(__dirname + '/public'));
-app.use('/tmp', express.static(__dirname + '/tmp_attachments'));
+// Ensure temp subfolders exist
+const TMP_ROOT = path.join(__dirname, 'tmp_attachments');
+const TMP_IMAGES = path.join(TMP_ROOT, 'images');
+const TMP_DOCS = path.join(TMP_ROOT, 'docs');
+try {
+  fs.mkdirSync(TMP_IMAGES, { recursive: true });
+  fs.mkdirSync(TMP_DOCS, { recursive: true });
+} catch {}
+
+app.use('/tmp/images', express.static(TMP_IMAGES, { maxAge: '1h', index: false }));
+// No public route for /tmp/docs — remains private
 
 const myBot = new MyBot();
 

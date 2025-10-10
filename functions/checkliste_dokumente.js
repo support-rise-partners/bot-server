@@ -97,7 +97,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
   const { dokumente, fragen, _error } = normalizeArgs(args);
 
   // Kurze Vorab-Nachricht an den Nutzer (falls ConversationReference vorhanden)
-  try {
+    try {
     const email = await getEmailByUserName(userName);
     if (email) {
       const refResult = await getReferenceByEmail(email);

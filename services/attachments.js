@@ -53,7 +53,7 @@ function safeUnlink(p) {
 
 function cleanUpOldFiles({ maxAgeMinutes = FILE_LIFETIME_MINUTES, targetDir = null } = {}) {
     const dir = targetDir || TEMP_DIR;
-    try { ensureDir(dir); } catch {}
+    if (!fs.existsSync(dir)) return 0; // do not create folders here
     const now = Date.now();
     let removed = 0;
     for (const file of fs.readdirSync(dir)) {
@@ -75,9 +75,7 @@ let __attachmentsCleanupTimer = null;
 
 export function startAttachmentsHousekeeping({ intervalMinutes = 5, maxAgeMinutes = FILE_LIFETIME_MINUTES } = {}) {
     if (__attachmentsCleanupTimer) return; // already active
-    ensureDir(TEMP_DIR);
-    ensureDir(IMAGES_DIR);
-    ensureDir(DOCS_DIR);
+    ensureDir(TEMP_DIR); // subfolders are managed at startup in index.js
     __attachmentsCleanupTimer = setInterval(() => {
         try {
             const removedImg = cleanUpOldFiles({ maxAgeMinutes, targetDir: IMAGES_DIR });
@@ -90,9 +88,7 @@ export function startAttachmentsHousekeeping({ intervalMinutes = 5, maxAgeMinute
 }
 
 function saveFileToTmp(buffer, { extension = 'bin', originalName = '', contentType = '', kind = 'auto' } = {}) {
-    ensureDir(TEMP_DIR);
-    ensureDir(IMAGES_DIR);
-    ensureDir(DOCS_DIR);
+    ensureDir(TEMP_DIR); // subfolders must already exist (created at startup)
 
     // 1) Normalize and sanitize extension
     let safeExt = (extension || 'bin').toString().replace(/[^a-z0-9]/gi, '').toLowerCase();
@@ -114,7 +110,9 @@ function saveFileToTmp(buffer, { extension = 'bin', originalName = '', contentTy
 
     const dir = targetKind === 'image' ? IMAGES_DIR : DOCS_DIR;
     const publicSub = targetKind === 'image' ? 'tmp/images' : 'tmp/docs';
-    ensureDir(dir);
+    if (!fs.existsSync(dir)) {
+        throw new Error(`Zielordner fehlt: ${dir}`);
+    }
 
     // 3) Build filename
     // For documents: prefer original name; for images: keep uuid to stay short/stable
@@ -306,7 +304,13 @@ export async function extractImagesFromContext(context) {
 
         // 3) Сохраняем файл в соответствующую подпапку
         const isImg = ct.startsWith('image/') || isImageByExt(extension) || ['png','jpg','jpeg','gif','bmp','webp'].includes(sigExt);
-        const publicUrl = saveFileToTmp(fileBuffer, { extension, originalName: name, contentType: ct, kind: isImg ? 'image' : 'doc' });
+        let publicUrl;
+        try {
+            publicUrl = saveFileToTmp(fileBuffer, { extension, originalName: name, contentType: ct, kind: isImg ? 'image' : 'doc' });
+        } catch (e) {
+            fileNotices.push(`Angehängte Datei konnte nicht gespeichert werden: ${name || '(unbenannt)'} – ${e?.message || e}`);
+            continue;
+        }
 
         // 4) Классифицируем: изображение → в imageUrls, остальные → в fileNotices
         if (isImg) {
