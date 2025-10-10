@@ -6,6 +6,8 @@ import {
   cleanupSessionResources
 } from '../services/tempCognitiveSearch.js';
 
+import { getChatCompletion } from '../services/openaiService.js';
+
 const OPENAI_ENDPOINT   = (process.env.OPENAI_ENDPOINT || '').trim();
 const OPENAI_KEY        = (process.env.OPENAI_KEY || '').trim();
 const OPENAI_DEPLOYMENT = (process.env.OPENAI_DEPLOYMENT || 'gpt-4o').trim();
@@ -68,6 +70,17 @@ function parseJsonSafe(raw) {
 export default async function checkliste_dokumente(sessionId, userName, args = {}) {
   // --- НОВОЕ: корректная распаковка аргументов
   const { dokumente, fragen, _error } = normalizeArgs(args);
+
+  try {
+    await getChatCompletion({
+      sessionId,
+      role: 'system',
+      text: 'Hmm... ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!',
+      userName
+    });
+  } catch (e) {
+    // Fehler beim Senden der Vorab-Nachricht ignorieren
+  }
 
   // Если парсинг провалился — вернём осмысленный результат, а не пустоту
   if (_error) {
