@@ -124,13 +124,13 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
 
   // Frühe Fehlerfälle
   if (_error) {
-    const results = [{ frage: null, yesno: '', antwort: 'Fehler beim Verarbeiten der Eingabe.', zitat: _error }];
+    const results = [{ frage: null, yesno: '', antwort: 'Fehler beim Verarbeiten der Eingabe.', quelle: '', zitat: _error }];
     console.log(results);
     // optional an Power Automate senden (Fehlerfall)
     return JSON.stringify(results);
   }
   if (!dokumente.length) {
-    const results = [{ frage: null, yesno: '', antwort: 'Keine Dokumente übermittelt.', zitat: '' }];
+    const results = [{ frage: null, yesno: '', antwort: 'Keine Dokumente übermittelt.', quelle: '', zitat: '' }];
     console.log(results);
     return JSON.stringify(results);
   }
@@ -143,17 +143,17 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
     await prepareAndIndexSession({ sessionId, urls: localDocPaths });
 
     // 2) Fragen beantworten (Vektor-Suche → LLM mit Kontext)
-    const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Gib **ausschließlich** JSON zurück im Format {"yesno": "ja"|"nein", "answer": string, "quote": string}.';
+    const SYSTEM = 'Du bist ein sachlicher Assistent. Antworte präzise in Deutsch. Gib **ausschließlich** JSON zurück im Format {"yesno": "ja"|"nein", "answer": string, "quote": string, "quelle": string}. "quelle" muss der exakte Dokumenttitel des **relevantesten** Chunks aus dem Kontext sein (z. B. der Titel aus der Überschrift "# Chunk N — <Dokumenttitel>"). Schreibe **keinen** Text außerhalb des JSON.';
     for (const frage of fragen) {
       const q = (frage || '').toString().trim();
       if (!q) {
-        results.push({ frage, yesno: '', antwort: 'Leere Frage.', zitat: '' });
+        results.push({ frage, yesno: '', antwort: 'Leere Frage.', quelle: '', zitat: '' });
         continue;
       }
 
       const chunks = await vectorSearchTopK({ sessionId, text: q, k: 3 });
       if (!chunks.length) {
-        results.push({ frage: q, yesno: 'nein', antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', zitat: '' });
+        results.push({ frage: q, yesno: 'nein', antwort: 'Keine fundierte Antwort in den Dokumenten gefunden.', quelle: '', zitat: '' });
         continue;
       }
 
@@ -161,7 +161,17 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         .map((c, i) => `# Chunk ${i + 1} — ${c.document_title}\n${c.content_text}`)
         .join('\n\n');
 
-      const USER = `Frage: ${q}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort **nur** als JSON mit den Feldern {\"yesno\": \"ja\" oder \"nein\", \"answer\": string, \"quote\": string}.\n- \"yesno\" soll eine sehr kurze Ja/Nein-Entscheidung sein (\"ja\" wenn der Kontext eine klare Bejahung stützt, sonst \"nein\").\n- Schreibe keinerlei zusätzlichen Text außerhalb des JSON.`;
+      const USER = `Frage: ${q}
+
+Kontext (relevante Chunks):
+${context}
+
+Formatiere die Antwort **nur** als JSON mit den Feldern {"yesno": "ja" oder "nein", "answer": string, "quote": string, "quelle": string}.
+- "yesno": sehr kurze Ja/Nein-Entscheidung ("ja" wenn der Kontext klar bejaht, sonst "nein").
+- "answer": kurze, präzise Begründung.
+- "quote": wörtliches Zitat aus dem **ausschlaggebenden** Chunk.
+- "quelle": **exakter Titel** des Dokuments aus dem **ausschlaggebenden** Chunk (so wie er in den Überschriften "# Chunk N — <Dokumenttitel>" steht).
+- Keine Einleitung/Erklärung außerhalb des JSON.`;
 
       let raw = '';
       try {
@@ -171,20 +181,26 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
           frage: q,
           yesno: '',
           antwort: 'Antwort konnte nicht generiert werden.',
+          quelle: chunks[0]?.document_title || chunks[0]?.metadata_storage_name || '',
           zitat: chunks[0]?.content_text?.slice(0, 600) || ''
         });
         continue;
       }
 
       const parsed = parseJsonSafe(raw);
-      const yesno  = typeof parsed?.yesno === 'string' ? parsed.yesno.trim().toLowerCase() : '';
+      const yesno   = typeof parsed?.yesno === 'string' ? parsed.yesno.trim().toLowerCase() : '';
       const antwort = parsed?.answer || (typeof raw === 'string' ? raw : '');
       const zitat   = parsed?.quote  || (chunks[0]?.content_text || '').slice(0, 600);
-      results.push({ frage: q, yesno, antwort, zitat });
+      let quelle    = parsed?.quelle || parsed?.source || '';
+      if (!quelle) {
+        // Fallback: nimm Titel des ersten relevanten Chunks
+        quelle = chunks[0]?.document_title || chunks[0]?.metadata_storage_name || '';
+      }
+      results.push({ frage: q, yesno, antwort, quelle, zitat });
     }
   } catch (err) {
     const msg = err?.message || String(err);
-    results.push({ frage: null, yesno: '', antwort: 'Interner Fehler im Verarbeitungspipeline.', zitat: msg });
+    results.push({ frage: null, yesno: '', antwort: 'Interner Fehler im Verarbeitungspipeline.', quelle: '', zitat: msg });
   } finally {
     // 3) Aufräumen: temporäre Ressourcen entfernen
     try {
