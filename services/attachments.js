@@ -183,6 +183,29 @@ function isImageByExt(ext = '') {
     return ['png','jpg','jpeg','gif','bmp','webp'].includes(String(ext).toLowerCase());
 }
 
+function extFromUrl(url = '') {
+    try {
+        const ext = path.extname(new URL(url).pathname).replace('.', '').toLowerCase();
+        if (ext && ext.length <= 5) return ext;
+    } catch {}
+    return '';
+}
+
+function extFromBufferSig(buffer) {
+    if (!buffer || buffer.length < 4) return '';
+    const sig = buffer.slice(0, 4).toString('hex').toLowerCase();
+    // PNG signature: 89 50 4e 47
+    if (sig.startsWith('89504e47')) return 'png';
+    // JPEG signature: ff d8 ff
+    if (sig.startsWith('ffd8ff')) return 'jpg';
+    // GIF signature: GIF8
+    if (buffer.slice(0, 3).toString() === 'GIF') return 'gif';
+    // PDF signature: %PDF
+    if (buffer.slice(0, 4).toString() === '%PDF') return 'pdf';
+    // DOCX/XLSX are zipped, not trivial to detect by signature here
+    return '';
+}
+
 async function fetchWithBotToken(url) {
     const credentials = new MicrosoftAppCredentials(
         process.env.MicrosoftAppId,
@@ -210,6 +233,9 @@ export async function extractImagesFromContext(context) {
 
     for (const attachment of attachments) {
         const ct = (attachment.contentType || '').toLowerCase();
+        if (!ct || ct === 'application/octet-stream') {
+            console.warn('⚠️ Kein contentType erkannt für Anhang:', attachment.name || '(unbenannt)', attachment.contentUrl || attachment?.content?.downloadUrl || 'no-url');
+        }
         if (!shouldProcessAttachment(attachment)) {
             // Ignoriere nicht-Datei-Anhänge wie text/html, Karten etc.
             continue;
@@ -240,9 +266,26 @@ export async function extractImagesFromContext(context) {
         }
 
         // 2) Определяем расширение по contentType или имени файла
-        const byCt = extFromContentType(ct);
-        const byName = path.extname(name).replace('.', '').toLowerCase();
-        extension = byCt || byName || 'bin';
+        let byCt = extFromContentType(ct);
+        let byName = path.extname(name).replace('.', '').toLowerCase();
+        let byTeams = (attachment?.content?.fileType || '').toLowerCase();
+        const urlCandidates = [
+            attachment?.content?.downloadUrl,
+            attachment?.contentUrl,
+            attachment?.content?.url,
+            attachment?.content?.contentUrl
+        ].filter(Boolean);
+        let byUrl = '';
+        for (const u of urlCandidates) { byUrl = extFromUrl(u); if (byUrl) break; }
+
+        // Prefer binary signature if contentType is missing/opaque or nothing certain was found
+        let bySig = '';
+        if (!byCt || byCt === 'bin' || ct === 'application/octet-stream') {
+            bySig = extFromBufferSig(fileBuffer);
+        }
+
+        // Final fallback: assume PNG (most common for screenshots) instead of BIN
+        extension = (byCt || byTeams || byName || byUrl || bySig || 'png').toLowerCase();
 
         // 3) Сохраняем файл в соответствующую подпапку
         const isImg = ct.startsWith('image/') || isImageByExt(extension);
