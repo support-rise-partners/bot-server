@@ -127,11 +127,10 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
       console.log('[notify] calling adapter.continueConversation…');
       await adapter.continueConversation(conversationReference, async (turnContext) => {
         console.log('[notify] continueConversation: building system reply via getChatCompletion…');
-        const response = await getChatCompletion({
-          sessionId: conversationReference?.conversation?.id,
-          role: 'system',
-          text: 'Hmm... ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!'
-        });
+        const response = await simpleChatCompletion(
+          'System: Du bist Risy – der freundliche, hilfsbereite Assistent für die Mitarbeitenden von RISE PARTNERS Audit GmbH. Formuliere eine kurze, lockere und empathische Nachricht im Du-Tonfall: Hmm... ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort! Halte dich kurz, natürlich und menschlich – gern mit einem passenden Emoji.',
+          'Erzeuge jetzt eine kurze, freundliche Hinweis-Nachricht als Antwort auf die Nutzeranfrage'
+        );
         const replyText = typeof response === 'string' ? response : response?.reply;
         console.log('[notify] getChatCompletion reply length=', replyText ? replyText.length : 0);
         if (replyText && replyText.trim()) {
