@@ -70,7 +70,7 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         await adapter.continueConversation(conversationReference, async (turnContext) => {
           const response = await simpleChatCompletion(
             'System: Du bist Risy – der freundliche Assistent. Formuliere eine sehr kurze, lockere System-Nachricht im Du-Ton: "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!"',
-            'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht zum Besipiel "Hmm… ich muss kurz nachdenken, ich melde mich gleich mit einer Antwort!" - ohne weitere Angaben.'
+            'Erzeuge und gebe zurück nur eine kurze, freundliche Hinweis-Nachricht (zum Besipiel leicht umformuliert "Hmm… lass mich kurz überlegen, ich bin gleich zurück mit der Antwort!") - ohne weitere Angaben.'
           );
           const replyText = typeof response === 'string' ? response : response?.reply;
           if (replyText && replyText.trim()) {
@@ -118,7 +118,6 @@ export default async function checkliste_dokumente(sessionId, userName, args = {
         .join('\n\n');
 
       const USER = `Frage: ${q}\n\nKontext (relevante Chunks):\n${context}\n\nFormatiere die Antwort **nur** als JSON mit den Feldern {\"yesno\": \"ja\" oder \"nein\", \"answer\": string, \"quote\": string}.\n- \"yesno\" soll eine sehr kurze Ja/Nein-Entscheidung sein (\"ja\" wenn der Kontext eine klare Bejahung stützt, sonst \"nein\").\n- Schreibe keinerlei zusätzlichen Text außerhalb des JSON.`;
-      console.log("[DEBUG] Chunks für Frage:", q, JSON.stringify(chunks, null, 2));
       let raw = '';
       try {
         raw = await simpleChatCompletion(SYSTEM, USER);
